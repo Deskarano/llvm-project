@@ -1,0 +1,6 @@
+block in
+{
+    input(hey[3:0], bye)
+    output(duplicate)
+    output(no[66:3])
+}
