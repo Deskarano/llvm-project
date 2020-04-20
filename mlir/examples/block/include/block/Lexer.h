@@ -57,7 +57,8 @@ public:
   /// debugging purposes (attaching a location to a Token).
   Lexer(std::string filename)
       : lastLocation(
-            {std::make_shared<std::string>(std::move(filename)), 0, 0}) {}
+      {std::make_shared<std::string>(std::move(filename)), 0, 0}) {}
+
   virtual ~Lexer() = default;
 
   /// Look at the current token in the stream.
@@ -131,9 +132,9 @@ private:
 
     // Identifier: [a-zA-Z][a-zA-Z0-9_]*
     if (isalpha(lastChar)) {
-      identifierStr = (char)lastChar;
+      identifierStr = (char) lastChar;
       while (isalnum((lastChar = Token(getNextChar()))) || lastChar == '_')
-        identifierStr += (char)lastChar;
+        identifierStr += (char) lastChar;
 
       if (identifierStr == "block")
         return tok_block;
