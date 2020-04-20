@@ -48,7 +48,7 @@ public:
 private:
   Lexer &lexer;
 
-  std::unique_ptr<VarBoundsAST> parseBounds() {
+  std::unique_ptr<VarBoundsAST> parseBounds(bool allowSingle) {
     if (lexer.getCurToken() != '[')
       return parseError<VarBoundsAST>("[", "to start bounds");
 
@@ -59,8 +59,7 @@ private:
     int64_t upper = lexer.getValue();
     lexer.consume(tok_number);
 
-    if (lexer.getCurToken() == ':')
-    {
+    if (lexer.getCurToken() == ':') {
       lexer.consume(Token(':'));
       if (lexer.getCurToken() != tok_number)
         return parseError<VarBoundsAST>("number", "for value lower bound");
@@ -73,13 +72,34 @@ private:
 
       lexer.consume(Token(']'));
       return std::make_unique<VarBoundsAST>(lower, upper);
-    }
-    else if(lexer.getCurToken() == ']')
-    {
-      lexer.consume(Token(']'));
-      return std::make_unique<VarBoundsAST>(upper, upper);
+    } else if (lexer.getCurToken() == ']') {
+      if(allowSingle)
+      {
+        lexer.consume(Token(']'));
+        return std::make_unique<VarBoundsAST>(upper, upper);
+      }
+      else
+        return parseError<VarBoundsAST>(":", "to separate bounds (no single allowed)");
     } else
       return parseError<VarBoundsAST>(": or ]", "to separate or end bounds");
+  }
+
+  std::unique_ptr<VarDeclAST> parseVarDecl() {
+    auto loc = lexer.getLastLocation();
+    std::string name(lexer.getId());
+    std::unique_ptr<VarBoundsAST> bounds;
+
+    lexer.consume(tok_identifier);
+    if(lexer.getCurToken() == '[')
+    {
+      bounds = parseBounds(false);
+      if(!bounds)
+        return nullptr;
+    }
+    else
+      bounds = std::make_unique<VarBoundsAST>(0, 0);
+
+    return std::make_unique<VarDeclAST>(loc, name, std::move(bounds));
   }
 
   std::unique_ptr<VarExprAST> parseVarExpr() {
@@ -89,7 +109,11 @@ private:
 
     lexer.consume(tok_identifier);
     if (lexer.getCurToken() == '[')
-      bounds = parseBounds();
+    {
+      bounds = parseBounds(true);
+      if(!bounds)
+        return nullptr;
+    }
     else
       bounds = std::make_unique<VarBoundsAST>(0, 0);
 
@@ -148,7 +172,7 @@ private:
         return lhs;
 
       // Okay, we know this is a binop.
-      if(lexer.getCurToken() != tok_arith)
+      if (lexer.getCurToken() != tok_arith)
         return parseError<ExprAST>("binary operator", "in RHS of expression");
 
       std::string binOp = lexer.getOperator();
@@ -186,15 +210,15 @@ private:
   std::unique_ptr<AssignmentExprAST> parseAssignment() {
     auto loc = lexer.getLastLocation();
     auto lhs = parseVarExpr();
-    if(!lhs)
+    if (!lhs)
       return nullptr;
 
-    if(lexer.getCurToken() != tok_assign)
+    if (lexer.getCurToken() != tok_assign)
       return parseError<AssignmentExprAST>("assignment operator", "in assignment expression");
     lexer.consume(tok_assign);
 
     auto rhs = parseExpression();
-    if(!rhs)
+    if (!rhs)
       return nullptr;
 
     return std::make_unique<AssignmentExprAST>(loc, std::move(lhs), std::move(rhs));
@@ -206,7 +230,7 @@ private:
     if (!lhs)
       return nullptr;
 
-    if(lexer.getCurToken() != tok_comp)
+    if (lexer.getCurToken() != tok_comp)
       return parseError<ConditionExprAST>("comparison operator", "in conditional expression");
 
     std::string op = lexer.getOperator();
@@ -277,7 +301,7 @@ private:
     while (lexer.getCurToken() == tok_property) {
       std::string type = lexer.getProperty();
       auto loc = lexer.getLastLocation();
-      auto varList = std::make_unique<VarExprASTList>();
+      auto varList = std::make_unique<VarDeclASTList>();
 
       lexer.consume(tok_property);
 
@@ -286,7 +310,7 @@ private:
 
       lexer.consume(Token('('));
       while (lexer.getCurToken() != ')') {
-        auto var = parseVarExpr();
+        auto var = parseVarDecl();
         if (!var)
           return nullptr;
 

@@ -11,12 +11,15 @@
 
 namespace block {
 
+/// Expressions
 class ExprAST {
 public:
   enum ExprASTKind {
     Expr_Const,
     Expr_Var,
     Expr_BinOp,
+    Expr_Cond,
+    Expr_Assign
   };
 
   ExprAST(ExprASTKind kind, Location location)
@@ -39,7 +42,6 @@ public:
       lower(lower), upper(upper) {}
 
   int64_t getLower() { return lower; }
-
   int64_t getUpper() { return upper; }
 
 private:
@@ -93,45 +95,81 @@ private:
   std::unique_ptr<ExprAST> lhs, rhs;
 };
 
-class ConditionExprAST : public BinaryExprAST {
+class ConditionExprAST : public ExprAST {
 public:
   ConditionExprAST(Location loc, std::string op,
                    std::unique_ptr<ExprAST> lhs,
                    std::unique_ptr<ExprAST> rhs) :
-      BinaryExprAST(loc, op, std::move(lhs), std::move(rhs)) {}
+      ExprAST(Expr_Cond, loc), op(op),
+      lhs(std::move(lhs)), rhs(std::move(rhs)) {}
+
+  llvm::StringRef getOp() { return op; }
+  ExprAST *getLHS() { return lhs.get(); }
+  ExprAST *getRHS() { return rhs.get(); }
+
+private:
+  std::string op;
+  std::unique_ptr<ExprAST> lhs, rhs;
 };
 
-class AssignmentExprAST : public BinaryExprAST {
+class AssignmentExprAST : public ExprAST {
 public:
   AssignmentExprAST(Location loc,
-                    std::unique_ptr<VarExprAST> lhs,
-                    std::unique_ptr<ExprAST> rhs) :
-      BinaryExprAST(loc, "=", std::move(lhs), std::move(rhs)) {}
+                   std::unique_ptr<ExprAST> lhs,
+                   std::unique_ptr<ExprAST> rhs) :
+      ExprAST(Expr_Assign, loc),
+      lhs(std::move(lhs)), rhs(std::move(rhs)) {}
+
+  ExprAST *getLHS() { return lhs.get(); }
+  ExprAST *getRHS() { return rhs.get(); }
+
+private:
+  std::unique_ptr<ExprAST> lhs, rhs;
 };
 
-/// Base class for all property nodes.
+/// Properties
+class VarDeclAST {
+public:
+  VarDeclAST(Location location, llvm::StringRef name,
+             std::unique_ptr<VarBoundsAST> bounds) :
+      location(location), name(name), bounds(std::move(bounds)) {}
+
+  virtual ~VarDeclAST() = default;
+
+  const Location &loc() { return location; }
+  llvm::StringRef getName() { return name; }
+  VarBoundsAST *getBounds() { return bounds.get(); }
+
+private:
+  Location location;
+  std::string name;
+  std::unique_ptr<VarBoundsAST> bounds;
+};
+
+using VarDeclASTList = std::vector<std::unique_ptr<VarDeclAST>>;
+
 class PropertyAST {
 public:
   PropertyAST(std::string kind,
               Location location,
-              std::unique_ptr<VarExprASTList> vars)
+              std::unique_ptr<VarDeclASTList> vars)
       : kind(kind), location(location), vars(std::move(vars)) {}
 
   virtual ~PropertyAST() = default;
 
   llvm::StringRef getKind() const { return kind; }
   const Location &loc() { return location; }
-  VarExprASTList *getVars() { return vars.get(); }
+  VarDeclASTList *getVars() { return vars.get(); }
 
 private:
   const std::string kind;
   Location location;
-  std::unique_ptr<VarExprASTList> vars;
+  std::unique_ptr<VarDeclASTList> vars;
 };
 
 using PropertyASTList = std::vector<std::unique_ptr<PropertyAST>>;
 
-/// Base class for all expression nodes.
+/// Base class for all event nodes.
 class EventAST {
 public:
   EventAST(std::string kind,
@@ -153,7 +191,6 @@ private:
   Location location;
   std::unique_ptr<ExprASTList> action;
   std::unique_ptr<ConditionExprAST> condition;
-
 };
 
 using EventASTList = std::vector<std::unique_ptr<EventAST>>;
