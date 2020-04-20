@@ -1,33 +1,11 @@
 
-block in
+block main
 {
-    input(hey[3:0], bye)
-    output(no[66:3])
+    input(no[66:3], fuuuuuuu[223:5])
 
     when(a == b + (5 - 3))
     {
         a[5] = 5 + 3
         c = 7
-    }
-}
-
-block boi
-{
-    input(no, yes, maybe)
-    state(decision[2:0])
-
-    when(yes == 1)
-    {
-        decision[2] = 1
-    }
-
-    when(no == 1)
-    {
-        decision[1] = 1
-    }
-
-    when(maybe == 1)
-    {
-        decision[0] = 1
     }
 }
