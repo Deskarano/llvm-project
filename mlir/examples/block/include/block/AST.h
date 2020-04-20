@@ -23,15 +23,15 @@ public:
       : kind(kind), location(location) {}
 
   virtual ~ExprAST() = default;
-
   ExprASTKind getKind() const { return kind; }
-
   const Location &loc() { return location; }
 
 private:
   const ExprASTKind kind;
   Location location;
 };
+
+using ExprASTList = std::vector<std::unique_ptr<ExprAST>>;
 
 class VarBoundsAST {
 public:
@@ -55,7 +55,6 @@ public:
       name(name), bounds(std::move(bounds)) {}
 
   llvm::StringRef getName() { return name; }
-
   VarBoundsAST *getBounds() { return bounds.get(); }
 
 private:
@@ -78,137 +77,85 @@ private:
 
 class BinaryExprAST : public ExprAST {
 public:
-  BinaryExprAST(Location loc, char op,
+  BinaryExprAST(Location loc, std::string op,
                 std::unique_ptr<ExprAST> lhs,
                 std::unique_ptr<ExprAST> rhs)
       : ExprAST(Expr_BinOp, loc), op(op),
         lhs(std::move(lhs)),
         rhs(std::move(rhs)) {}
 
-  char getOp() { return op; }
-
+  llvm::StringRef getOp() { return op; }
   ExprAST *getLHS() { return lhs.get(); }
-
   ExprAST *getRHS() { return rhs.get(); }
 
 private:
-  char op;
+  std::string op;
   std::unique_ptr<ExprAST> lhs, rhs;
 };
 
-using ExprASTList = std::vector<std::unique_ptr<ExprAST>>;
-
 class ConditionExprAST : public BinaryExprAST {
 public:
-  ConditionExprAST(Location loc, char op,
+  ConditionExprAST(Location loc, std::string op,
                    std::unique_ptr<ExprAST> lhs,
                    std::unique_ptr<ExprAST> rhs) :
       BinaryExprAST(loc, op, std::move(lhs), std::move(rhs)) {}
 };
 
-/// Base class for all property nodes.
-class PropAST {
+class AssignmentExprAST : public BinaryExprAST {
 public:
-  enum PropASTKind {
-    Prop_Input, Prop_Output, Prop_State
-  };
+  AssignmentExprAST(Location loc,
+                    std::unique_ptr<VarExprAST> lhs,
+                    std::unique_ptr<ExprAST> rhs) :
+      BinaryExprAST(loc, "=", std::move(lhs), std::move(rhs)) {}
+};
 
-  PropAST(PropASTKind kind,
-          Location location,
-          std::unique_ptr<VarExprASTList> vars)
+/// Base class for all property nodes.
+class PropertyAST {
+public:
+  PropertyAST(std::string kind,
+              Location location,
+              std::unique_ptr<VarExprASTList> vars)
       : kind(kind), location(location), vars(std::move(vars)) {}
 
-  virtual ~PropAST() = default;
+  virtual ~PropertyAST() = default;
 
-  PropASTKind getKind() const { return kind; }
-
+  llvm::StringRef getKind() const { return kind; }
   const Location &loc() { return location; }
-
   VarExprASTList *getVars() { return vars.get(); }
 
 private:
-  const PropASTKind kind;
+  const std::string kind;
   Location location;
   std::unique_ptr<VarExprASTList> vars;
 };
 
-class InputPropAST : public PropAST {
-public:
-  InputPropAST(Location location, std::unique_ptr<VarExprASTList> vars) :
-      PropAST(Prop_Input, location, std::move(vars)) {}
-};
-
-class OutputPropAST : public PropAST {
-public:
-  OutputPropAST(Location location, std::unique_ptr<VarExprASTList> vars) :
-      PropAST(Prop_Output, location, std::move(vars)) {}
-};
-
-class StatePropAST : public PropAST {
-public:
-  StatePropAST(Location location, std::unique_ptr<VarExprASTList> vars) :
-      PropAST(Prop_State, location, std::move(vars)) {}
-};
-
-class PropASTGroup {
-public:
-  PropASTGroup(std::unique_ptr<InputPropAST> input,
-               std::unique_ptr<OutputPropAST> output,
-               std::unique_ptr<StatePropAST> state)
-      : input(std::move(input)), output(std::move(output)), state(std::move(state)) {}
-
-private:
-  std::unique_ptr<InputPropAST> input;
-  std::unique_ptr<OutputPropAST> output;
-  std::unique_ptr<StatePropAST> state;
-
-};
+using PropertyASTList = std::vector<std::unique_ptr<PropertyAST>>;
 
 /// Base class for all expression nodes.
 class EventAST {
 public:
-  enum EventASTKind {
-    Event_When, Event_Always
-  };
-
-  EventAST(EventASTKind kind,
+  EventAST(std::string kind,
            Location location,
-           std::unique_ptr<ExprASTList> action)
-      : kind(kind), location(location), action(std::move(action)) {}
+           std::unique_ptr<ExprASTList> action,
+           std::unique_ptr<ConditionExprAST> condition)
+      : kind(kind), location(location),
+        action(std::move(action)), condition(std::move(condition)) {}
 
   virtual ~EventAST() = default;
 
-  EventASTKind getKind() const { return kind; }
+  llvm::StringRef getKind() const { return kind; }
   const Location &loc() { return location; }
   ExprASTList *getAction() { return action.get(); }
+  ConditionExprAST *getCondition() { return condition.get(); }
 
 private:
-  const EventASTKind kind;
+  std::string kind;
   Location location;
   std::unique_ptr<ExprASTList> action;
+  std::unique_ptr<ConditionExprAST> condition;
+
 };
 
-class WhenEventAST : public EventAST {
-public:
-  WhenEventAST(Location location,
-               std::unique_ptr<ExprASTList> action,
-               std::unique_ptr<ConditionExprAST> condition) :
-      EventAST(Event_When, location, std::move(action)), cond(std::move(condition)) {}
-
-  ConditionExprAST *getCondition() { return cond.get(); }
-
-private:
-  std::unique_ptr<ConditionExprAST> cond;
-};
-
-class AlwaysEventAST : public EventAST {
-public:
-  AlwaysEventAST(Location location,
-                 std::unique_ptr<ExprASTList> action) :
-      EventAST(Event_Always, location, std::move(action)) {}
-};
-
-/// A block-list of expressions.
 using EventASTList = std::vector<std::unique_ptr<EventAST>>;
 
 /// This class represents the "prototype" for a function, which captures its
@@ -224,7 +171,6 @@ public:
       : location(location), name(name) {}
 
   const Location &loc() { return location; }
-
   llvm::StringRef getName() const { return name; }
 };
 
@@ -233,21 +179,19 @@ class BlockAST {
 
 public:
   BlockAST(std::unique_ptr<PrototypeAST> proto,
-           std::unique_ptr<PropASTGroup> properties,
+           std::unique_ptr<PropertyASTList> properties,
            std::unique_ptr<EventASTList> events)
       : proto(std::move(proto)),
         properties(std::move(properties)),
         events(std::move(events)) {}
 
   PrototypeAST *getProto() { return proto.get(); }
-
-  PropASTGroup *getProperties() { return properties.get(); }
-
+  PropertyASTList *getProperties() { return properties.get(); }
   EventASTList *getEvents() { return events.get(); }
 
 private:
   std::unique_ptr<PrototypeAST> proto;
-  std::unique_ptr<PropASTGroup> properties;
+  std::unique_ptr<PropertyASTList> properties;
   std::unique_ptr<EventASTList> events;
 };
 
@@ -260,7 +204,6 @@ public:
       : functions(std::move(functions)) {}
 
   auto begin() -> decltype(functions.begin()) { return functions.begin(); }
-
   auto end() -> decltype(functions.end()) { return functions.end(); }
 };
 

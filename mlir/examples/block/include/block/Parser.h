@@ -59,21 +59,27 @@ private:
     int64_t upper = lexer.getValue();
     lexer.consume(tok_number);
 
-    if (lexer.getCurToken() != ':')
-      return parseError<VarBoundsAST>(":", "to separate upper and lower bounds");
+    if (lexer.getCurToken() == ':')
+    {
+      lexer.consume(Token(':'));
+      if (lexer.getCurToken() != tok_number)
+        return parseError<VarBoundsAST>("number", "for value lower bound");
 
-    lexer.consume(Token(':'));
-    if (lexer.getCurToken() != tok_number)
-      return parseError<VarBoundsAST>("number", "for value lower bound");
+      int64_t lower = lexer.getValue();
+      lexer.consume(tok_number);
 
-    int64_t lower = lexer.getValue();
-    lexer.consume(tok_number);
+      if (lexer.getCurToken() != ']')
+        return parseError<VarBoundsAST>("]", "to end bounds");
 
-    if (lexer.getCurToken() != ']')
-      return parseError<VarBoundsAST>("]", "to end bounds");
-
-    lexer.consume(Token(']'));
-    return std::make_unique<VarBoundsAST>(lower, upper);
+      lexer.consume(Token(']'));
+      return std::make_unique<VarBoundsAST>(lower, upper);
+    }
+    else if(lexer.getCurToken() == ']')
+    {
+      lexer.consume(Token(']'));
+      return std::make_unique<VarBoundsAST>(upper, upper);
+    } else
+      return parseError<VarBoundsAST>(": or ]", "to separate or end bounds");
   }
 
   std::unique_ptr<VarExprAST> parseVarExpr() {
@@ -113,15 +119,20 @@ private:
 
   std::unique_ptr<ExprAST> parsePrimary() {
     switch (lexer.getCurToken()) {
+
+    case tok_identifier:
+      return parseVarExpr();
+
+    case tok_number:
+      return parseNumberExpr();
+
+    case '(':
+      return parseParenExpr();
+
     default:
       llvm::errs() << "unknown token '" << lexer.getCurToken()
                    << "' when expecting an expression\n";
       return nullptr;
-    case tok_identifier:return parseVarExpr();
-    case tok_number:return parseNumberExpr();
-    case '(':return parseParenExpr();
-    case ';':return nullptr;
-    case '}':return nullptr;
     }
   }
 
@@ -137,8 +148,11 @@ private:
         return lhs;
 
       // Okay, we know this is a binop.
-      int binOp = lexer.getCurToken();
-      lexer.consume(Token(binOp));
+      if(lexer.getCurToken() != tok_arith)
+        return parseError<ExprAST>("binary operator", "in RHS of expression");
+
+      std::string binOp = lexer.getOperator();
+      lexer.consume(tok_arith);
       auto loc = lexer.getLastLocation();
 
       // Parse the primary expression after the binary operator.
@@ -169,24 +183,45 @@ private:
     return parseBinOpRHS(0, std::move(lhs));
   }
 
+  std::unique_ptr<AssignmentExprAST> parseAssignment() {
+    auto loc = lexer.getLastLocation();
+    auto lhs = parseVarExpr();
+    if(!lhs)
+      return nullptr;
+
+    if(lexer.getCurToken() != tok_assign)
+      return parseError<AssignmentExprAST>("assignment operator", "in assignment expression");
+    lexer.consume(tok_assign);
+
+    auto rhs = parseExpression();
+    if(!rhs)
+      return nullptr;
+
+    return std::make_unique<AssignmentExprAST>(loc, std::move(lhs), std::move(rhs));
+  }
+
   std::unique_ptr<ConditionExprAST> parseCondition() {
     auto loc = lexer.getLastLocation();
     auto lhs = parseExpression();
     if (!lhs)
       return nullptr;
 
-    char op = lexer.getCurToken();
-    lexer.consume(Token(op));
+    if(lexer.getCurToken() != tok_comp)
+      return parseError<ConditionExprAST>("comparison operator", "in conditional expression");
+
+    std::string op = lexer.getOperator();
+    lexer.consume(tok_comp);
 
     auto rhs = parseExpression();
     if (!rhs)
       return nullptr;
 
     return std::make_unique<ConditionExprAST>(loc, op,
-                                              std::move(lhs), std::move(rhs));
+                                              std::move(lhs),
+                                              std::move(rhs));
   }
 
-  std::unique_ptr<ExprASTList> parseEventAction() {
+  std::unique_ptr<ExprASTList> parseAction() {
     auto exprList = std::make_unique<ExprASTList>();
 
     if (lexer.getCurToken() != '{')
@@ -194,8 +229,8 @@ private:
 
     lexer.consume(Token('{'));
     while (lexer.getCurToken() != '}') {
-      auto expr = parseExpression();
-      if(!expr)
+      auto expr = parseAssignment();
+      if (!expr)
         return nullptr;
 
       exprList->push_back(std::move(expr));
@@ -205,153 +240,69 @@ private:
     return exprList;
   }
 
-  std::unique_ptr<AlwaysEventAST> parseAlwaysEvent() {
-    if(lexer.getCurToken() != tok_event_always)
-      return parseError<AlwaysEventAST>("always event", "to start always event");
-
-    auto loc = lexer.getLastLocation();
-    lexer.consume(tok_event_always);
-
-    auto action = parseEventAction();
-    if(!action)
-      return nullptr;
-
-    return std::make_unique<AlwaysEventAST>(loc, std::move(action));
-  }
-
-  std::unique_ptr<WhenEventAST> parseWhenEvent() {
-    if(lexer.getCurToken() != tok_event_when)
-      return parseError<WhenEventAST>("when event", "to start when event");
-
-    auto loc = lexer.getLastLocation();
-    lexer.consume(tok_event_when);
-    if (lexer.getCurToken() != '(')
-      return parseError<WhenEventAST>("(", "to start event condition");
-
-    lexer.consume(Token('('));
-    auto condition = parseCondition();
-    if (!condition)
-      return nullptr;
-
-    if (lexer.getCurToken() != ')')
-      return parseError<WhenEventAST>(")", "to end event condition");
-    lexer.consume(Token(')'));
-
-    auto action = parseEventAction();
-    if(!action)
-      return nullptr;
-
-    return std::make_unique<WhenEventAST>(loc, std::move(action), std::move(condition));
-  }
-
   std::unique_ptr<EventASTList> parseEvents() {
     auto eventList = std::make_unique<EventASTList>();
 
-    while (true) {
-      if (lexer.getCurToken() == tok_event_when)
-        eventList->push_back(parseWhenEvent());
+    while (lexer.getCurToken() == tok_event) {
+      std::string type = lexer.getEvent();
+      auto loc = lexer.getLastLocation();
+      std::unique_ptr<ConditionExprAST> condition = nullptr;
 
-      else if(lexer.getCurToken() == tok_event_always)
-        eventList->push_back(parseAlwaysEvent());
+      lexer.consume(tok_event);
+      if (lexer.getCurToken() == '(') {
+        lexer.consume(Token('('));
 
-      else break;
+        condition = parseCondition();
+        if (!condition)
+          return nullptr;
+
+        if (lexer.getCurToken() != ')')
+          return parseError<EventASTList>(")", "to end event condition");
+        lexer.consume(Token(')'));
+      }
+
+      auto action = parseAction();
+      if (!action)
+        return nullptr;
+
+      eventList->push_back(std::make_unique<EventAST>(type, loc, std::move(action), std::move(condition)));
     }
 
     return eventList;
   }
 
-  template<typename T>
-  std::unique_ptr<T> parseProperty(Token tok) {
-    auto varList = std::make_unique<VarExprASTList>();
-    auto loc = lexer.getLastLocation();
-    lexer.consume(tok);
+  std::unique_ptr<PropertyASTList> parseProperties() {
+    auto propertyList = std::make_unique<PropertyASTList>();
 
-    if (lexer.getCurToken() != '(')
-      return parseError<T>("(", "to start property list");
+    while (lexer.getCurToken() == tok_property) {
+      std::string type = lexer.getProperty();
+      auto loc = lexer.getLastLocation();
+      auto varList = std::make_unique<VarExprASTList>();
 
-    lexer.consume(Token('('));
-    while (lexer.getCurToken() != ')') {
-      auto var = parseVarExpr();
-      if (!var)
-        return nullptr;
+      lexer.consume(tok_property);
 
-      varList->push_back(std::move(var));
-      if (lexer.getCurToken() == ',')
-        lexer.consume(Token(','));
+      if (lexer.getCurToken() != '(')
+        return parseError<PropertyASTList>("(", "to start property list");
+
+      lexer.consume(Token('('));
+      while (lexer.getCurToken() != ')') {
+        auto var = parseVarExpr();
+        if (!var)
+          return nullptr;
+
+        varList->push_back(std::move(var));
+        if (lexer.getCurToken() == ',')
+          lexer.consume(Token(','));
+      }
+
+      if (lexer.getCurToken() != ')')
+        return parseError<PropertyASTList>(")", "to end property list");
+
+      lexer.consume(Token(')'));
+      propertyList->push_back(std::make_unique<PropertyAST>(type, loc, std::move(varList)));
     }
 
-    if (lexer.getCurToken() != ')')
-      return parseError<T>(")", "to end property list");
-
-    lexer.consume(Token(')'));
-    return std::make_unique<T>(std::move(loc), std::move(varList));
-  }
-
-  std::unique_ptr<PropASTGroup> parseProperties() {
-    bool foundInput, foundOutput, foundState;
-    foundInput = foundOutput = foundState = false;
-
-    std::unique_ptr<InputPropAST> inputProperty;
-    std::unique_ptr<OutputPropAST> outputProperty;
-    std::unique_ptr<StatePropAST> stateProperty;
-
-    while (!foundInput || !foundOutput || !foundState) {
-      if (lexer.getCurToken() == tok_prop_input) {
-        if (foundInput)
-          return logicError<PropASTGroup>("duplicate input property");
-        else {
-          inputProperty = parseProperty<InputPropAST>(tok_prop_input);
-          if (!inputProperty)
-            return nullptr;
-
-          foundInput = true;
-        }
-      } else if (lexer.getCurToken() == tok_prop_output) {
-        if (foundOutput)
-          return logicError<PropASTGroup>("duplicate output property");
-        else {
-          outputProperty = parseProperty<OutputPropAST>(tok_prop_output);
-          if (!outputProperty)
-            return nullptr;
-
-          foundOutput = true;
-        }
-      } else if (lexer.getCurToken() == tok_prop_state) {
-        if (foundState)
-          return logicError<PropASTGroup>("duplicate state property");
-        else {
-          stateProperty = parseProperty<StatePropAST>(tok_prop_state);
-          if (!stateProperty)
-            return nullptr;
-
-          foundState = true;
-        }
-      } else
-        break;
-    }
-
-    auto loc = lexer.getLastLocation();
-    if (!foundInput) {
-      auto emptyVarList = std::make_unique<VarExprASTList>();
-      inputProperty = std::make_unique<InputPropAST>(std::move(loc),
-                                                     std::move(emptyVarList));
-    }
-
-    if (!foundOutput) {
-      auto emptyVarList = std::make_unique<VarExprASTList>();
-      outputProperty = std::make_unique<OutputPropAST>(std::move(loc),
-                                                       std::move(emptyVarList));
-    }
-
-    if (!foundState) {
-      auto emptyVarList = std::make_unique<VarExprASTList>();
-      stateProperty = std::make_unique<StatePropAST>(std::move(loc),
-                                                     std::move(emptyVarList));
-    }
-
-    return std::make_unique<PropASTGroup>(std::move(inputProperty),
-                                          std::move(outputProperty),
-                                          std::move(stateProperty));
+    return propertyList;
   }
 
   /// prototype ::= block id
@@ -404,23 +355,10 @@ private:
 
   /// Get the precedence of the pending binary operator token.
   int getTokPrecedence() {
-    if (!isascii(lexer.getCurToken()))
+    if (lexer.getCurToken() == tok_arith)
+      return 20;
+    else
       return -1;
-
-    // 1 is lowest precedence.
-    switch (static_cast<char>(lexer.getCurToken())) {
-    case '-':return 20;
-
-    case '+':return 20;
-
-    case '&':return 20;
-
-    case '|':return 20;
-
-    case '^':return 20;
-
-    default:return -1;
-    }
   }
 
   /// Helper function to signal errors while parsing, it takes an argument

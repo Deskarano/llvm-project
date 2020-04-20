@@ -4,9 +4,9 @@ block in
     input(hey[3:0], bye)
     output(no[66:3])
 
-    when(a = b + (5 - 3))
+    when(a == b + (5 - 3))
     {
-        a + 3
-        c + 7
+        a[5:] = 5 + 3
+        c = 7
     }
 }

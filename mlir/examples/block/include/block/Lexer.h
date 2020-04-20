@@ -31,14 +31,14 @@ enum Token : int {
 
   // commands
   tok_block = -2,
+  tok_property = -3,
+  tok_event = -4,
 
-  tok_prop_input = -3,
-  tok_prop_output = -4,
-  tok_prop_state = -5,
-
-  tok_event_when = -6,
-  tok_event_always = -7,
-  tok_event_connect = -8,
+  // operators
+  tok_arith = -5,
+  tok_bool = -6,
+  tok_comp = -7,
+  tok_assign = -8,
 
   // primary
   tok_identifier = -9,
@@ -84,6 +84,27 @@ public:
   double getValue() {
     assert(curTok == tok_number);
     return numVal;
+  }
+
+  /// Return the current property type
+  llvm::StringRef getProperty() {
+    assert(curTok == tok_property);
+    return identifierStr;
+  }
+
+  /// Return the current event type
+  llvm::StringRef getEvent() {
+    assert(curTok == tok_event);
+    return identifierStr;
+  }
+
+  /// Return the current operator type
+  llvm::StringRef getOperator() {
+    assert(curTok == tok_arith ||
+        curTok == tok_bool ||
+        curTok == tok_comp ||
+        curTok == tok_assign);
+    return operatorStr;
   }
 
   /// Return the location for the beginning of the current token.
@@ -139,37 +160,63 @@ private:
       if (identifierStr == "block")
         return tok_block;
 
-      else if (identifierStr == "input")
-        return tok_prop_input;
+      else if (identifierStr == "input" ||
+          identifierStr == "output" ||
+          identifierStr == "state")
+        return tok_property;
 
-      else if (identifierStr == "output")
-        return tok_prop_output;
-
-      else if (identifierStr == "state")
-        return tok_prop_state;
-
-      else if (identifierStr == "always")
-        return tok_event_always;
-
-      else if (identifierStr == "when")
-        return tok_event_when;
-
-      else if (identifierStr == "connect")
-        return tok_event_connect;
+      else if (identifierStr == "always" ||
+          identifierStr == "when" ||
+          identifierStr == "connect")
+        return tok_event;
 
       return tok_identifier;
     }
 
     // Number: [0-9.]+
-    if (isdigit(lastChar) || lastChar == '.') {
+    if (isdigit(lastChar)) {
       std::string numStr;
       do {
         numStr += lastChar;
         lastChar = Token(getNextChar());
-      } while (isdigit(lastChar) || lastChar == '.');
+      } while (isdigit(lastChar));
 
-      numVal = strtod(numStr.c_str(), nullptr);
+      numVal = strtol(numStr.c_str(), nullptr, 10);
       return tok_number;
+    }
+
+    // Operators:
+    if (lastChar == '+' || lastChar == '-' || lastChar == '^') {
+      operatorStr = lastChar;
+
+      lastChar = Token(getNextChar());
+      return tok_arith;
+    }
+
+    if (lastChar == '&' || lastChar == '|') {
+      operatorStr = lastChar;
+      lastChar = Token(getNextChar());
+
+      if (operatorStr[0] == lastChar) {
+        operatorStr += lastChar;
+        lastChar = Token(getNextChar());
+        return tok_bool;
+      } else
+        return tok_arith;
+    }
+
+    if (lastChar == '<' || lastChar == '>' || lastChar == '=')
+    {
+      operatorStr = lastChar;
+      lastChar = Token(getNextChar());
+
+      if(lastChar == '=')
+      {
+        operatorStr += lastChar;
+        lastChar = Token(getNextChar());
+        return tok_comp;
+      }
+      else if(operatorStr[0] == '=') return tok_assign;
     }
 
     if (lastChar == '#') {
@@ -202,7 +249,10 @@ private:
   std::string identifierStr;
 
   /// If the current Token is a number, this contains the value.
-  double numVal = 0;
+  int64_t numVal = 0;
+
+  /// If the current Token is an operator, this contains the value
+  std::string operatorStr;
 
   /// The last value returned by getNextChar(). We need to keep it around as we
   /// always need to read ahead one character to decide when to end a token and
