@@ -55,43 +55,97 @@ private:
   }
 
   mlir::LogicalResult declare(llvm::StringRef var, mlir::Value value) {
-    llvm::outs() << "declaring " << var << " with value" << value << "\n";
-
     if (symbolTable.count(var))
       return mlir::failure();
     symbolTable.insert(var, value);
     return mlir::success();
   }
 
-  mlir::FuncOp mlirGen(BlockAST &blockAST) {
-    llvm::ScopedHashTableScope<llvm::StringRef, mlir::Value> varScope(symbolTable);
+  mlir::Value mlirGen(ExprAST *expr) {
+    switch(expr->getKind()) {
+    case block::ExprAST::Expr_Const:
+      return nullptr;
 
-    std::string blockName = blockAST.getProto()->getName();
-    auto location = loc(blockAST.getProto()->loc());
+    case block::ExprAST::Expr_Var:
+      return nullptr;
+
+    case block::ExprAST::Expr_BinOp:
+      return nullptr;
+
+    case block::ExprAST::Expr_Cond:
+      return nullptr;
+
+    case block::ExprAST::Expr_Assign:
+      return nullptr;
+    }
+  }
+
+  mlir::LogicalResult mlirGen(ExprASTList *exprList) {
+
+  }
+
+  mlir::LogicalResult mlirGen(EventASTList *events) {
+    // parse all the "always" events first - these go at the beginning of the function block
+    for (auto &e : *events) {
+      if (e->getKind() == "always") {
+        if (e->getCondition() != nullptr) {
+          emitError(loc(e->loc()), "always event with condition");
+          return mlir::failure();
+        }
+
+        if (failed(mlirGen(e->getAction())))
+          return mlir::failure();
+      }
+    }
+
+    // then parse the "when" events
+    for (auto &e : *events) {
+      if (e->getKind() == "when") {
+        if(e->getCondition() == nullptr)
+        {
+          emitError(loc(e->loc()), "when event without condition");
+          return mlir::failure();
+        }
+
+        if(failed(mlirGen(e->getCondition())))
+          return mlir::failure();
+
+        if(failed(mlirGen(e->getAction())))
+          return mlir::failure();
+      }
+    }
+  }
+
+  mlir::FuncOp mlirGen(PrototypeAST *proto, PropertyASTList *properties) {
+    std::string blockName = proto->getName();
+    auto location = loc(proto->loc());
 
     std::unique_ptr<PropertyAST> input, output, state;
     bool inputFound, outputFound, stateFound;
     inputFound = outputFound = stateFound = false;
 
-    for (auto &p : *blockAST.getProperties()) {
+    for (auto &p : *properties) {
       if (p->getKind() == "input") {
-        if (inputFound)
-          return nullptr; // duplicate inputs
-        else {
+        if (inputFound) {
+          emitError(loc(p->loc()), "duplicate input declaration");
+          return nullptr;
+        } else {
           inputFound = true;
           input = std::move(p);
         }
       } else if (p->getKind() == "output") {
-        if (outputFound)
-          return nullptr; // duplicate outputs
-        else {
+        if (outputFound) {
+          emitError(loc(p->loc()), "duplicate output declaration");
+          return nullptr;
+        } else {
           outputFound = true;
           output = std::move(p);
         }
       } else if (p->getKind() == "state") {
-        if (stateFound)
-          return nullptr; // duplicate state
-        else {
+        if (stateFound) {
+          emitError(loc(p->loc()), "duplicate state declaration");
+          return nullptr;
+        } else {
           stateFound = true;
           state = std::move(p);
         }
@@ -101,16 +155,14 @@ private:
     // create the function type
     std::vector<mlir::Type> inputTypes, outputTypes;
 
-    if(inputFound)
-    {
+    if (inputFound) {
       for (auto &var : *input->getVars())
         inputTypes.push_back(mlir::IntegerType::get(var->getBounds()->getUpper() -
                                                         var->getBounds()->getLower() + 1,
                                                     builder.getContext()));
     }
 
-    if(outputFound)
-    {
+    if (outputFound) {
       for (auto &var : *output->getVars())
         outputTypes.push_back(mlir::IntegerType::get(var->getBounds()->getUpper() -
                                                          var->getBounds()->getLower() + 1,
@@ -122,8 +174,7 @@ private:
     auto function = mlir::FuncOp::create(location, blockName, funcType);
     auto &entryBlock = *function.addEntryBlock();
 
-    if(inputFound)
-    {
+    if (inputFound) {
       for (const auto &nameValue : llvm::zip(*input->getVars(),
                                              entryBlock.getArguments())) {
         if (failed(declare(std::get<0>(nameValue)->getName(),
@@ -132,13 +183,20 @@ private:
       }
     }
 
-    // push declared variables
-    if(outputFound)
-    {
-      for(const auto &nameValue : llvm::zip(*output->getVars(),
-                                              outputTypes))
-        if(failed(declare(std::get<0>(nameValue)->getName(), mlir::Value(0))
-          return nullptr;
+    builder.setInsertionPointToStart(&entryBlock);
+
+    // todo: push variables declared in state and output
+    return function;
+  }
+
+  mlir::FuncOp mlirGen(BlockAST &blockAST) {
+    llvm::ScopedHashTableScope<llvm::StringRef, mlir::Value> varScope(symbolTable);
+    mlir::FuncOp function(mlirGen(blockAST.getProto(),
+                                  blockAST.getProperties()));
+
+    if (failed(mlirGen(blockAST.getEvents()))) {
+      function.erase();
+      return nullptr;
     }
 
     return function;

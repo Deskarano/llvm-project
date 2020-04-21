@@ -17,7 +17,7 @@ def ConstantOp : Block_Op<"constant", [NoSideEffect]> {
     let summary = "constant";
 
     let arguments = (ins I64Attr:$value);
-    let results = (outs I64);
+    let results = (outs AnyInteger);
 
     let builders = [
         OpBuilder<"Builder *builder, OperationState &state, "
@@ -29,6 +29,35 @@ def ConstantOp : Block_Op<"constant", [NoSideEffect]> {
     ];
 
     let verifier = [{ return ::verify(*this); }];
+}
+
+class Binary_Op<string mnemonic> : Block_Op<mnemonic> {
+    let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
+    let results = (outs AnyInteger);
+
+    let builders = [
+        OpBuilder<"Builder *b, OperationState &state, Value lhs, Value rhs">
+    ];
+}
+
+def AddOp : Binary_Op<"add"> {
+    let summary = "addition operator";
+}
+
+def SubOp : Binary_Op<"sub"> {
+    let summary = "subtraction operator";
+}
+
+def AndOp : Binary_Op<"and"> {
+    let summary = "bitwise and operator";
+}
+
+def OrOp : Binary_Op<"or"> {
+    let summary = "bitwise or operator";
+}
+
+def XorOp : Binary_Op<"xor"> {
+    let summary = "bitwise exlusive or operator";
 }
 
 #endif // BLOCK_OPS

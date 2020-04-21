@@ -1,11 +1,17 @@
 
 block main
 {
-    input(no[66:3], fuuuuuuu[223:5])
+    input(no[7:0], fuuuuuuu)
+    output(boiiiiiiiiii)
 
     when(a == b + (5 - 3))
     {
         a[5] = 5 + 3
         c = 7
+    }
+
+    always
+    {
+        boiiiiii = no
     }
 }
