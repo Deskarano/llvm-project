@@ -17,8 +17,8 @@ BlockDialect::BlockDialect(mlir::MLIRContext *ctx) : mlir::Dialect("block", ctx)
 
 void ConstantNumberOp::build(mlir::Builder *builder,
                              mlir::OperationState &state,
-                             int64_t value) {
-  auto dataType = IntegerType::get(64, builder->getContext());
+                             int64_t value, int size) {
+  auto dataType = IntegerType::get(size, builder->getContext());
   auto dataAttribute = IntegerAttr::get(dataType, value);
 
   ConstantNumberOp::build(builder, state, dataType, dataAttribute);
@@ -41,30 +41,43 @@ static mlir::LogicalResult verify(ConstantBooleanOp op) {
   return success();
 }
 
+void SliceOp::build(Builder *b, OperationState &state, Value val, int upper, int lower) {
+  auto dataType = IntegerType::get(abs(upper - lower) + 1, b->getContext());
+  auto sliceType = IntegerType::get(64, b->getContext());
+  ;
+  SliceOp::build(b, state, dataType, val,
+                 IntegerAttr::get(sliceType, upper),
+                 IntegerAttr::get(sliceType, lower));
+}
+
 /// Arithmetic Operations
 
 void AddOp::build(Builder *b, OperationState &state,
-                  Value lhs, Value rhs) {
-  state.addTypes(IntegerType::get(64, b->getContext()));
+                  Value lhs, Value rhs, int size) {
+  state.addTypes(IntegerType::get(size, b->getContext()));
   state.addOperands({lhs, rhs});
 }
 
-void SubOp::build(Builder *b, OperationState &state, Value lhs, Value rhs) {
-  state.addTypes(IntegerType::get(64, b->getContext()));
+void SubOp::build(Builder *b, OperationState &state,
+                  Value lhs, Value rhs, int size) {
+  state.addTypes(IntegerType::get(size, b->getContext()));
   state.addOperands({lhs, rhs});
 }
 
-void BitwiseAndOp::build(Builder *b, OperationState &state, Value lhs, Value rhs) {
-  state.addTypes(IntegerType::get(64, b->getContext()));
+void BitwiseAndOp::build(Builder *b, OperationState &state,
+                         Value lhs, Value rhs, int size) {
+  state.addTypes(IntegerType::get(size, b->getContext()));
   state.addOperands({lhs, rhs});
 }
 
-void BitwiseOrOp::build(Builder *b, OperationState &state, Value lhs, Value rhs) {
-  state.addTypes(IntegerType::get(64, b->getContext()));
+void BitwiseOrOp::build(Builder *b, OperationState &state,
+                        Value lhs, Value rhs, int size) {
+  state.addTypes(IntegerType::get(size, b->getContext()));
   state.addOperands({lhs, rhs});
 }
-void BitwiseXorOp::build(Builder *b, OperationState &state, Value lhs, Value rhs) {
-  state.addTypes(IntegerType::get(64, b->getContext()));
+void BitwiseXorOp::build(Builder *b, OperationState &state,
+                         Value lhs, Value rhs, int size) {
+  state.addTypes(IntegerType::get(size, b->getContext()));
   state.addOperands({lhs, rhs});
 }
 

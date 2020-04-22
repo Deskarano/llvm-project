@@ -25,7 +25,7 @@ def ConstantNumberOp : Block_Op<"const_num", [NoSideEffect]> {
             build(builder, state, value.getType(), value);
         }]>,
 
-        OpBuilder<"Builder *builder, OperationState &state, int64_t value">
+        OpBuilder<"Builder *builder, OperationState &state, int64_t value, int size">
     ];
 
     let verifier = [{ return ::verify(*this); }];
@@ -47,12 +47,23 @@ def ConstantBooleanOp : Block_Op<"const_bool", [NoSideEffect]> {
     ];
 }
 
-class Binary_Op<string mnemonic> : Block_Op<mnemonic> {
-    let arguments = (ins I64:$lhs, I64:$rhs);
-    let results = (outs I64);
+def SliceOp : Block_Op<"slice"> {
+    let summary = "variable slice operator";
+
+    let arguments = (ins AnyInteger:$val, I64Attr:$upper, I64Attr:$lower);
+    let results = (outs AnyInteger);
 
     let builders = [
-        OpBuilder<"Builder *b, OperationState &state, Value lhs, Value rhs">
+        OpBuilder<"Builder *b, OperationState &state, Value val, int upper, int lower">
+    ];
+}
+
+class Binary_Op<string mnemonic> : Block_Op<mnemonic> {
+    let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
+    let results = (outs AnyInteger);
+
+    let builders = [
+        OpBuilder<"Builder *b, OperationState &state, Value lhs, Value rhs, int size">
     ];
 }
 

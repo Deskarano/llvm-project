@@ -82,6 +82,16 @@ public:
   }
 
   /// Return the current number (prereq: getCurToken() == tok_number)
+  char getBase(){
+    assert(curTok == tok_const_num);
+    return constantBase;
+  }
+
+  llvm::StringRef getSize() {
+    assert(curTok == tok_const_num);
+    return constantSize;
+  }
+
   llvm::StringRef getValue() {
     assert(curTok == tok_const_num ||
         curTok == tok_const_bool);
@@ -183,13 +193,34 @@ private:
 
     // Number: [0-9.]+
     if (isdigit(lastChar)) {
-      std::string numStr;
+      std::string sizeStr, valStr;
+      char base;
+
       do {
-        numStr += lastChar;
+        sizeStr += lastChar;
         lastChar = Token(getNextChar());
       } while (isdigit(lastChar));
 
-      constantVal = numStr;
+      if(lastChar == 'b' || lastChar == 'd' || lastChar == 'x')
+      {
+        base = lastChar;
+        lastChar = Token(getNextChar());
+        do{
+          valStr += lastChar;
+          lastChar = Token(getNextChar());
+        } while (isdigit(lastChar));
+
+        constantBase = base;
+        constantSize = sizeStr;
+        constantVal = valStr;
+      }
+      else
+      {
+        constantBase = 'd';
+        constantSize = -1;
+        constantVal = sizeStr;
+      }
+
       return tok_const_num;
     }
 
@@ -224,6 +255,8 @@ private:
         return tok_comp;
       } else if (operatorStr[0] == '=')
         return tok_assign;
+      else
+        return tok_comp;
     }
 
     if (lastChar == '#') {
@@ -256,6 +289,8 @@ private:
   std::string identifierStr;
 
   /// If the current Token is a number, this contains the value.
+  char constantBase;
+  std::string constantSize;
   std::string constantVal;
 
   /// If the current Token is an operator, this contains the value

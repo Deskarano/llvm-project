@@ -48,7 +48,7 @@ std::unique_ptr<BoolExprAST> Parser::parseBoolParen() {
 
 std::unique_ptr<BoolExprAST> Parser::parseBoolBinOpRHS(int exprPrec, std::unique_ptr<BoolExprAST> lhs) {
   while (true) {
-    int tokPrec = getTokPrecedence();
+    int tokPrec = getBoolTokPrecedence();
 
     if (tokPrec < exprPrec)
       return lhs;
@@ -64,7 +64,7 @@ std::unique_ptr<BoolExprAST> Parser::parseBoolBinOpRHS(int exprPrec, std::unique
     if (!rhs)
       return nullptr;
 
-    int nextPrec = getTokPrecedence();
+    int nextPrec = getBoolTokPrecedence();
     if (tokPrec < nextPrec) {
       rhs = parseBoolBinOpRHS(tokPrec + 1, std::move(rhs));
       if (!rhs)

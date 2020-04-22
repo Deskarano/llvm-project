@@ -6,6 +6,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <vector>
 
@@ -42,34 +43,47 @@ private:
 
 class BitsExprAST : public ExprAST {
 public:
-  BitsExprAST(ExprASTKind kind, Location location)
-      : ExprAST(kind, Expr_Bits, location) {}
+  BitsExprAST(ExprASTKind kind, Location location, int size)
+      : ExprAST(kind, Expr_Bits, location), size(size) {}
+
+  int getSize() { return size; }
+
+protected:
+  int size;
 };
 
 using BitsExprASTList = std::vector<std::unique_ptr<BitsExprAST>>;
 
 class VarBoundsAST {
 public:
-  VarBoundsAST(int64_t lower, int64_t upper) :
+  VarBoundsAST(int lower, int upper) :
       lower(lower), upper(upper) {}
 
-  int64_t getLower() { return lower; }
-  int64_t getUpper() { return upper; }
+  int getLower() { return lower; }
+  int getUpper() { return upper; }
 
 private:
-  int64_t lower;
-  int64_t upper;
+  int lower;
+  int upper;
 };
 
 class BitsVarExprAST : public BitsExprAST {
 public:
   BitsVarExprAST(Location location, llvm::StringRef name,
                  std::unique_ptr<VarBoundsAST> bounds) :
-      BitsExprAST(Expr_Var, location),
+      BitsExprAST(Expr_Var, location,
+                  (bounds->getUpper() == -1 && bounds->getLower() == -1) ?
+                  -1 : abs(bounds->getUpper() - bounds->getLower()) + 1),
       name(name), bounds(std::move(bounds)) {}
 
   llvm::StringRef getName() { return name; }
   VarBoundsAST *getBounds() { return bounds.get(); }
+
+  void setBounds(std::unique_ptr<VarBoundsAST> newBounds) {
+    bounds = std::move(newBounds);
+    size = (bounds->getUpper() == -1 && bounds->getLower() == -1) ?
+           -1 : abs(bounds->getUpper() - bounds->getLower()) + 1;
+  }
 
   static bool classof(const ExprAST *c) {
     return c->getType() == Expr_Bits &&
@@ -85,8 +99,8 @@ using BitsVarExprASTList = std::vector<std::unique_ptr<BitsVarExprAST>>;
 
 class BitsConstExprAST : public BitsExprAST {
 public:
-  BitsConstExprAST(Location loc, int64_t val) :
-      BitsExprAST(Expr_Const, loc), val(val) {}
+  BitsConstExprAST(Location loc, int64_t val, int size) :
+      BitsExprAST(Expr_Const, loc, size), val(val) {}
 
   int64_t getValue() { return val; }
 
@@ -104,13 +118,20 @@ public:
   BitsBinaryExprAST(Location loc, std::string op,
                     std::unique_ptr<BitsExprAST> lhs,
                     std::unique_ptr<BitsExprAST> rhs)
-      : BitsExprAST(Expr_BinOp, loc), op(op),
+      : BitsExprAST(Expr_BinOp, loc, -1), op(op),
         lhs(std::move(lhs)),
         rhs(std::move(rhs)) {}
 
   llvm::StringRef getOp() { return op; }
   BitsExprAST *getLHS() { return lhs.get(); }
   BitsExprAST *getRHS() { return rhs.get(); }
+
+  int getSize() {
+    if (lhs->getSize() != rhs->getSize())
+      return -1;
+    else
+      return lhs->getSize();
+  }
 
   static bool classof(const ExprAST *c) {
     return c->getType() == Expr_Bits &&
@@ -127,7 +148,7 @@ public:
   BitsAssignExprAST(Location loc,
                     std::unique_ptr<BitsVarExprAST> lhs,
                     std::unique_ptr<BitsExprAST> rhs) :
-      BitsExprAST(Expr_Special, loc),
+      BitsExprAST(Expr_Special, loc, -1),
       lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 
   BitsVarExprAST *getLHS() { return lhs.get(); }

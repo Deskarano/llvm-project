@@ -52,7 +52,8 @@ private:
   std::unique_ptr<PrototypeAST> parsePrototype();
   std::unique_ptr<BlockAST> parseDefinition();
 
-  int getTokPrecedence();
+  int getArithTokPrecedence();
+  int getBoolTokPrecedence();
 
   template<typename R, typename T, typename U>
   std::unique_ptr<R> parseError(T &&expected, U &&context) {

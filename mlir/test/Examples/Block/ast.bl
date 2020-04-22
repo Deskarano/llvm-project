@@ -1,10 +1,10 @@
 
 block main
 {
-    input(no[7:0], fuuuuuuu)
-    output(boiiiiiiiiii)
+    input(no[7:0], fuuuuuuu[511:0])
+    output(boiiiiiiiiii, yeah[3:0])
 
-    when(false && no[3] == fuuuuuuu + (5 - 0))
+    when(fuuuuuuu[4:5] < 2d1 && no == 8b10101010)
     {
         a[5] = 5 + 3
         c = 7
@@ -13,15 +13,5 @@ block main
     always
     {
         boiiiiii = no
-    }
-}
-
-block test
-{
-    input(a, b)
-
-    when(a == b)
-    {
-        a = b + 1
     }
 }

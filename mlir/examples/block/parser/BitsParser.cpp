@@ -1,5 +1,7 @@
 #include "block/Parser.h"
 
+#include <climits>
+
 namespace block {
 
 std::unique_ptr<VarBoundsAST> Parser::parseBounds(bool allowSingle) {
@@ -10,8 +12,8 @@ std::unique_ptr<VarBoundsAST> Parser::parseBounds(bool allowSingle) {
   if (lexer.getCurToken() != tok_const_num)
     return parseError<VarBoundsAST>("number", "for value upper bound");
 
-  int64_t upper = strtol(lexer.getValue().data(),
-                         nullptr, 10);
+  int upper = strtol(lexer.getValue().data(),
+                     nullptr, 10);
   lexer.consume(tok_const_num);
 
   if (lexer.getCurToken() == ':') {
@@ -19,8 +21,8 @@ std::unique_ptr<VarBoundsAST> Parser::parseBounds(bool allowSingle) {
     if (lexer.getCurToken() != tok_const_num)
       return parseError<VarBoundsAST>("number", "for value lower bound");
 
-    int64_t lower = strtol(lexer.getValue().data(),
-                           nullptr, 10);
+    int lower = strtol(lexer.getValue().data(),
+                       nullptr, 10);
     lexer.consume(tok_const_num);
 
     if (lexer.getCurToken() != ']')
@@ -49,16 +51,28 @@ std::unique_ptr<BitsVarExprAST> Parser::parseBitsVar() {
     if (!bounds)
       return nullptr;
   } else
-    bounds = std::make_unique<VarBoundsAST>(0, 0);
+    bounds = std::make_unique<VarBoundsAST>(-1, -1);
 
   return std::make_unique<BitsVarExprAST>(loc, name, std::move(bounds));
 }
 
 std::unique_ptr<BitsConstExprAST> Parser::parseBitsConst() {
   auto loc = lexer.getLastLocation();
-  auto result = std::make_unique<BitsConstExprAST>(std::move(loc),
-                                                   strtol(lexer.getValue().data(),
-                                                          nullptr, 10));
+  int base, size, value;
+
+  if (lexer.getBase() == 'b')
+    base = 2;
+  else if (lexer.getBase() == 'd')
+    base = 10;
+  else if (lexer.getBase() == 'x')
+    base = 16;
+  else
+    return logicError<BitsConstExprAST>("unsupported base '" + std::string(lexer.getBase(), 1) + "'");
+
+  size = strtol(lexer.getSize().data(), nullptr, 10);
+  value = strtol(lexer.getValue().data(), nullptr, base);
+
+  auto result = std::make_unique<BitsConstExprAST>(std::move(loc), value, size);
   lexer.consume(tok_const_num);
   return result;
 }
@@ -80,7 +94,7 @@ std::unique_ptr<BitsExprAST> Parser::parseBitsBinOpRHS(int exprPrec,
                                                        std::unique_ptr<BitsExprAST> lhs) {
   // If this is a binop, find its precedence.
   while (true) {
-    int tokPrec = getTokPrecedence();
+    int tokPrec = getArithTokPrecedence();
 
     // If this is a binop that binds at least as tightly as the current binop,
     // consume it, otherwise we are done.
@@ -103,7 +117,7 @@ std::unique_ptr<BitsExprAST> Parser::parseBitsBinOpRHS(int exprPrec,
 
     // If BinOp binds less tightly with rhs than the operator after rhs, let
     // the pending operator take rhs as its lhs.
-    int nextPrec = getTokPrecedence();
+    int nextPrec = getArithTokPrecedence();
     if (tokPrec < nextPrec) {
       rhs = parseBitsBinOpRHS(tokPrec + 1, std::move(rhs));
       if (!rhs)
@@ -129,7 +143,7 @@ std::unique_ptr<BitsExprAST> Parser::parseBitsPrimary() {
     return parseBitsParen();
 
   default:
-    return parseError<BitsExprAST>("expression",  "when parsing primary of bits expression");
+    return parseError<BitsExprAST>("expression", "when parsing primary of bits expression");
   }
 }
 

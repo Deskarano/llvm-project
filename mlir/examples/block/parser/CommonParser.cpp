@@ -162,14 +162,18 @@ std::unique_ptr<ModuleAST> Parser::parseModule() {
   return std::make_unique<ModuleAST>(std::move(blocks));
 }
 
-int Parser::getTokPrecedence() {
+int Parser::getArithTokPrecedence() {
   if (lexer.getCurToken() == tok_arith)
-    return 20;
-  else if (lexer.getCurToken() == tok_bool)
     return 20;
   else
     return -1;
 }
 
+int Parser::getBoolTokPrecedence() {
+  if (lexer.getCurToken() == tok_bool)
+    return 20;
+  else
+    return -1;
+}
 }
 

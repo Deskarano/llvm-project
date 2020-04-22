@@ -62,7 +62,7 @@ private:
   }
 
   mlir::Value mlirGenBitsConstExpr(BitsConstExprAST &expr) {
-    return builder.create<ConstantNumberOp>(loc(expr.loc()), expr.getValue());
+    return builder.create<ConstantNumberOp>(loc(expr.loc()), expr.getValue(), expr.getSize());
   }
 
   mlir::Value mlirGenBoolConstExpr(BoolConstExprAST &expr) {
@@ -70,15 +70,32 @@ private:
   }
 
   mlir::Value mlirGenBitsVarExpr(BitsVarExprAST &expr) {
-    if (auto variable = symbolTable.lookup(expr.getName()))
-      return variable;
+    if (auto variable = symbolTable.lookup(expr.getName())) {
+      if (expr.getBounds()->getUpper() == -1 && expr.getBounds()->getLower() == -1) {
+        // fix bounds that the parser couldn't infer
+        auto newBounds = std::make_unique<VarBoundsAST>(0, variable.getType().getIntOrFloatBitWidth() - 1);
+        expr.setBounds(std::move(newBounds));
+      }
 
-    emitError(loc(expr.loc()), "unknown variable '")
-        << expr.getName() << "'";
-    return nullptr;
+      return builder.create<SliceOp>(loc(expr.loc()), variable,
+                                     expr.getBounds()->getUpper(),
+                                     expr.getBounds()->getLower());
+
+    } else {
+      emitError(loc(expr.loc()), "unknown variable '")
+          << expr.getName() << "'";
+      return nullptr;
+    }
   }
 
   mlir::Value mlirGenBitsBinaryExpr(BitsBinaryExprAST &expr) {
+    if (expr.getLHS()->getSize() != expr.getRHS()->getSize()) {
+      emitError(loc(expr.loc()), "cannot create expression with different sizes for LHS and RHS");
+      return nullptr;
+    }
+
+    int size = expr.getLHS()->getSize();
+
     mlir::Value lhs = mlirGenBitsExpr(*expr.getLHS());
     if (!lhs)
       return nullptr;
@@ -89,19 +106,19 @@ private:
 
     auto location = loc(expr.loc());
     if (expr.getOp() == "+")
-      return builder.create<AddOp>(location,  lhs, rhs);
+      return builder.create<AddOp>(location, lhs, rhs, size);
 
     else if (expr.getOp() == "-")
-      return builder.create<SubOp>(location, lhs, rhs);
+      return builder.create<SubOp>(location, lhs, rhs, size);
 
     else if (expr.getOp() == "&")
-      return builder.create<BitwiseAndOp>(location, lhs, rhs);
+      return builder.create<BitwiseAndOp>(location, lhs, rhs, size);
 
     else if (expr.getOp() == "|")
-      return builder.create<BitwiseOrOp>(location, lhs, rhs);
+      return builder.create<BitwiseOrOp>(location, lhs, rhs, size);
 
     else if (expr.getOp() == "^")
-      return builder.create<BitwiseXorOp>(location, lhs, rhs);
+      return builder.create<BitwiseXorOp>(location, lhs, rhs, size);
 
     else {
       emitError(location, "unknown operation '") << expr.getOp() << "'";
@@ -143,6 +160,11 @@ private:
     mlir::Value rhs = mlirGenBitsExpr(*expr.getRHS());
     if (!rhs)
       return nullptr;
+
+    if (expr.getLHS()->getSize() != expr.getRHS()->getSize()) {
+      emitError(loc(expr.loc()), "cannot compare expressions with different sizes for LHS and RHS");
+      return nullptr;
+    }
 
     auto location = loc(expr.loc());
     if (expr.getOp() == "<")
@@ -290,15 +312,15 @@ private:
 
     if (inputFound) {
       for (auto &var : *input->getVars())
-        inputTypes.push_back(mlir::IntegerType::get(var->getBounds()->getUpper() -
-                                                        var->getBounds()->getLower() + 1,
+        inputTypes.push_back(mlir::IntegerType::get(abs(var->getBounds()->getUpper() -
+                                                        var->getBounds()->getLower()) + 1,
                                                     builder.getContext()));
     }
 
     if (outputFound) {
       for (auto &var : *output->getVars())
-        outputTypes.push_back(mlir::IntegerType::get(var->getBounds()->getUpper() -
-                                                         var->getBounds()->getLower() + 1,
+        outputTypes.push_back(mlir::IntegerType::get(abs(var->getBounds()->getUpper() -
+                                                         var->getBounds()->getLower()) + 1,
                                                      builder.getContext()));
     }
 
