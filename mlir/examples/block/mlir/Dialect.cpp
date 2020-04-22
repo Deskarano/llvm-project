@@ -13,19 +13,33 @@ BlockDialect::BlockDialect(mlir::MLIRContext *ctx) : mlir::Dialect("block", ctx)
   >();
 }
 
-void ConstantOp::build(mlir::Builder *builder,
+void ConstantNumberOp::build(mlir::Builder *builder,
                        mlir::OperationState &state,
                        int64_t value) {
   auto dataType = IntegerType::get(64, builder->getContext());
   auto dataAttribute = IntegerAttr::get(dataType, value);
 
-  ConstantOp::build(builder, state, dataType, dataAttribute);
+  ConstantNumberOp::build(builder, state, dataType, dataAttribute);
 }
 
-static mlir::LogicalResult verify(ConstantOp op)
+static mlir::LogicalResult verify(ConstantNumberOp op)
 {
   return success();
 }
+//
+//void ConstantBooleanOp::build(mlir::Builder *builder,
+//                             mlir::OperationState &state,
+//                             bool value) {
+//  auto dataType = nullptr;
+//  auto dataAttribute = BoolAttr::get(value, builder->getContext());
+//
+//  ConstantBooleanOp::build(builder, state, dataType, dataAttribute);
+//}
+//
+//static mlir::LogicalResult verify(ConstantBooleanOp op)
+//{
+//  return success();
+//}
 
 #define GET_OP_CLASSES
 #include "block/Ops.cpp.inc"

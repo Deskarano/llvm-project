@@ -42,7 +42,8 @@ enum Token : int {
 
   // primary
   tok_identifier = -9,
-  tok_number = -10,
+  tok_const_num = -10,
+  tok_const_bool = -11,
 };
 
 /// The Lexer is an abstract base class providing all the facilities that the
@@ -81,9 +82,10 @@ public:
   }
 
   /// Return the current number (prereq: getCurToken() == tok_number)
-  double getValue() {
-    assert(curTok == tok_number);
-    return numVal;
+  llvm::StringRef getValue() {
+    assert(curTok == tok_const_num ||
+        curTok == tok_const_bool);
+    return constantVal;
   }
 
   /// Return the current property type
@@ -170,6 +172,12 @@ private:
           identifierStr == "connect")
         return tok_event;
 
+      else if (identifierStr == "true" ||
+          identifierStr == "false") {
+        constantVal = identifierStr;
+        return tok_const_bool;
+      }
+
       return tok_identifier;
     }
 
@@ -181,8 +189,8 @@ private:
         lastChar = Token(getNextChar());
       } while (isdigit(lastChar));
 
-      numVal = strtol(numStr.c_str(), nullptr, 10);
-      return tok_number;
+      constantVal = numStr;
+      return tok_const_num;
     }
 
     // Operators:
@@ -205,18 +213,17 @@ private:
         return tok_arith;
     }
 
-    if (lastChar == '<' || lastChar == '>' || lastChar == '=')
-    {
+    if (lastChar == '<' || lastChar == '>' ||
+        lastChar == '=' || lastChar == '!') {
       operatorStr = lastChar;
       lastChar = Token(getNextChar());
 
-      if(lastChar == '=')
-      {
+      if (lastChar == '=') {
         operatorStr += lastChar;
         lastChar = Token(getNextChar());
         return tok_comp;
-      }
-      else if(operatorStr[0] == '=') return tok_assign;
+      } else if (operatorStr[0] == '=')
+        return tok_assign;
     }
 
     if (lastChar == '#') {
@@ -249,7 +256,7 @@ private:
   std::string identifierStr;
 
   /// If the current Token is a number, this contains the value.
-  int64_t numVal = 0;
+  std::string constantVal;
 
   /// If the current Token is an operator, this contains the value
   std::string operatorStr;

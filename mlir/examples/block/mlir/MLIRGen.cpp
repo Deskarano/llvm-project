@@ -24,11 +24,11 @@ class MLIRGenImpl {
 public:
   MLIRGenImpl(mlir::MLIRContext &context) : builder(&context) {}
 
-  mlir::ModuleOp mlirGen(ModuleAST &moduleAST) {
+  mlir::ModuleOp mlirGenModule(ModuleAST &moduleAST) {
     theModule = mlir::ModuleOp::create(builder.getUnknownLoc());
 
     for (BlockAST &b : moduleAST) {
-      auto block = mlirGen(b);
+      auto block = mlirGenBlock(b);
       if (!block)
         return nullptr;
 
@@ -61,30 +61,162 @@ private:
     return mlir::success();
   }
 
-  mlir::Value mlirGen(ExprAST *expr) {
-    switch(expr->getKind()) {
-    case block::ExprAST::Expr_Const:
+  mlir::Value mlirGenBitsConstExpr(BitsConstExprAST &expr) {
+    return builder.create<ConstantNumberOp>(loc(expr.loc()), expr.getValue());
+  }
+
+  mlir::Value mlirGenBoolConstExpr(BoolConstExprAST &expr) {
+    return builder.create<ConstantBooleanOp>(loc(expr.loc()), expr.getValue());
+  }
+
+  mlir::Value mlirGenBitsVarExpr(BitsVarExprAST &expr) {
+    if (auto variable = symbolTable.lookup(expr.getName()))
+      return variable;
+
+    emitError(loc(expr.loc()), "unknown variable '")
+        << expr.getName() << "'";
+    return nullptr;
+  }
+
+  mlir::Value mlirGenBitsBinaryExpr(BitsBinaryExprAST &expr) {
+    mlir::Value lhs = mlirGenBitsExpr(*expr.getLHS());
+    if (!lhs)
       return nullptr;
 
-    case block::ExprAST::Expr_Var:
+    mlir::Value rhs = mlirGenBitsExpr(*expr.getRHS());
+    if (!rhs)
       return nullptr;
 
-    case block::ExprAST::Expr_BinOp:
-      return nullptr;
+    auto location = loc(expr.loc());
+    if (expr.getOp() == "+")
+      return builder.create<AddOp>(location,  lhs, rhs);
 
-    case block::ExprAST::Expr_Cond:
-      return nullptr;
+    else if (expr.getOp() == "-")
+      return builder.create<SubOp>(location, lhs, rhs);
 
-    case block::ExprAST::Expr_Assign:
+    else if (expr.getOp() == "&")
+      return builder.create<BitwiseAndOp>(location, lhs, rhs);
+
+    else if (expr.getOp() == "|")
+      return builder.create<BitwiseOrOp>(location, lhs, rhs);
+
+    else if (expr.getOp() == "^")
+      return builder.create<BitwiseXorOp>(location, lhs, rhs);
+
+    else {
+      emitError(location, "unknown operation '") << expr.getOp() << "'";
       return nullptr;
     }
   }
 
-  mlir::LogicalResult mlirGen(ExprASTList *exprList) {
+  mlir::Value mlirGenBoolBinaryExpr(BoolBinaryExprAST &expr) {
+    mlir::Value lhs = mlirGenBoolExpr(*expr.getLHS());
+    if (!lhs)
+      return nullptr;
+
+    mlir::Value rhs = mlirGenBoolExpr(*expr.getRHS());
+    if (!rhs)
+      return nullptr;
+
+    auto location = loc(expr.loc());
+    if (expr.getOp() == "&&")
+      return builder.create<BooleanAndOp>(location, lhs, rhs);
+
+    else if (expr.getOp() == "||")
+      return builder.create<BooleanOrOp>(location, lhs, rhs);
+
+    else {
+      emitError(location, "unknown operation '") << expr.getOp() << "'";
+      return nullptr;
+    }
+  }
+
+  mlir::Value mlirGenBitsAssignExpr(BitsAssignExprAST &expr) {
 
   }
 
-  mlir::LogicalResult mlirGen(EventASTList *events) {
+  mlir::Value mlirGenCompExpr(BoolCompExprAST &expr) {
+    mlir::Value lhs = mlirGenBitsExpr(*expr.getLHS());
+    if (!lhs)
+      return nullptr;
+
+    mlir::Value rhs = mlirGenBitsExpr(*expr.getRHS());
+    if (!rhs)
+      return nullptr;
+
+    auto location = loc(expr.loc());
+    if (expr.getOp() == "<")
+      return builder.create<LessThanOp>(location, lhs, rhs);
+
+    else if (expr.getOp() == "<=")
+      return builder.create<LessThanOrEqualOp>(location, lhs, rhs);
+
+    else if (expr.getOp() == ">")
+      return builder.create<GreaterThanOp>(location, lhs, rhs);
+
+    else if (expr.getOp() == ">=")
+      return builder.create<GreaterThanOrEqualOp>(location, lhs, rhs);
+
+    else if (expr.getOp() == "==")
+      return builder.create<EqualOp>(location, lhs, rhs);
+
+    else if (expr.getOp() == "!=")
+      return builder.create<NotEqualOp>(location, lhs, rhs);
+
+    else {
+      emitError(location, "unknown operation '") << expr.getOp() << "'";
+      return nullptr;
+    }
+  }
+
+  mlir::Value mlirGenBitsExpr(BitsExprAST &expr) {
+    switch (expr.getKind()) {
+    case block::ExprAST::Expr_Const:
+      return mlirGenBitsConstExpr(llvm::cast<BitsConstExprAST>(expr));
+
+    case block::ExprAST::Expr_Var:
+      return mlirGenBitsVarExpr(llvm::cast<BitsVarExprAST>(expr));
+
+    case block::ExprAST::Expr_BinOp:
+      return mlirGenBitsBinaryExpr(llvm::cast<BitsBinaryExprAST>(expr));
+
+    case block::ExprAST::Expr_Special:
+      return mlirGenBitsAssignExpr(llvm::cast<BitsAssignExprAST>(expr));
+
+    default:
+      emitError(loc(expr.loc()), "unknown expression type");
+    }
+
+    return nullptr;
+  }
+
+  mlir::Value mlirGenBoolExpr(BoolExprAST &expr) {
+    switch (expr.getKind()) {
+    case block::ExprAST::Expr_Const:
+      return mlirGenBoolConstExpr(llvm::cast<BoolConstExprAST>(expr));
+
+    case block::ExprAST::Expr_Var:
+      emitError(loc(expr.loc()), "boolean variables are unsupported");
+      return nullptr;
+
+    case block::ExprAST::Expr_BinOp:
+      return mlirGenBoolBinaryExpr(llvm::cast<BoolBinaryExprAST>(expr));
+
+    case block::ExprAST::Expr_Special:
+      return mlirGenCompExpr(llvm::cast<BoolCompExprAST>(expr));
+
+    default:
+      emitError(loc(expr.loc()), "unknown expression type");
+    }
+
+    return nullptr;
+  }
+
+  mlir::LogicalResult mlirGenActions(BitsExprASTList *exprList) {
+
+  }
+
+  mlir::LogicalResult mlirGenEvents(EventASTList *events) {
     // parse all the "always" events first - these go at the beginning of the function block
     for (auto &e : *events) {
       if (e->getKind() == "always") {
@@ -93,7 +225,7 @@ private:
           return mlir::failure();
         }
 
-        if (failed(mlirGen(e->getAction())))
+        if (failed(mlirGenActions(e->getAction())))
           return mlir::failure();
       }
     }
@@ -101,22 +233,23 @@ private:
     // then parse the "when" events
     for (auto &e : *events) {
       if (e->getKind() == "when") {
-        if(e->getCondition() == nullptr)
-        {
+        if (e->getCondition() == nullptr) {
           emitError(loc(e->loc()), "when event without condition");
           return mlir::failure();
         }
 
-        if(failed(mlirGen(e->getCondition())))
+        if (mlirGenBoolExpr(*e->getCondition()) == nullptr)
           return mlir::failure();
 
-        if(failed(mlirGen(e->getAction())))
+        if (failed(mlirGenActions(e->getAction())))
           return mlir::failure();
       }
     }
+
+    return mlir::success();
   }
 
-  mlir::FuncOp mlirGen(PrototypeAST *proto, PropertyASTList *properties) {
+  mlir::FuncOp mlirGenHeader(PrototypeAST *proto, PropertyASTList *properties) {
     std::string blockName = proto->getName();
     auto location = loc(proto->loc());
 
@@ -189,12 +322,12 @@ private:
     return function;
   }
 
-  mlir::FuncOp mlirGen(BlockAST &blockAST) {
+  mlir::FuncOp mlirGenBlock(BlockAST &blockAST) {
     llvm::ScopedHashTableScope<llvm::StringRef, mlir::Value> varScope(symbolTable);
-    mlir::FuncOp function(mlirGen(blockAST.getProto(),
-                                  blockAST.getProperties()));
+    mlir::FuncOp function(mlirGenHeader(blockAST.getProto(),
+                                        blockAST.getProperties()));
 
-    if (failed(mlirGen(blockAST.getEvents()))) {
+    if (failed(mlirGenEvents(blockAST.getEvents()))) {
       function.erase();
       return nullptr;
     }
@@ -210,7 +343,7 @@ namespace block {
 // The public API for codegen.
 mlir::OwningModuleRef mlirGen(mlir::MLIRContext &context,
                               ModuleAST &moduleAST) {
-  return MLIRGenImpl(context).mlirGen(moduleAST);
+  return MLIRGenImpl(context).mlirGenModule(moduleAST);
 }
 
 } // namespace block

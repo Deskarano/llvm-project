@@ -14,27 +14,39 @@ namespace block {
 /// Expressions
 class ExprAST {
 public:
+  enum ExprASTType {
+    Expr_Bits,
+    Expr_Bool,
+  };
+
   enum ExprASTKind {
     Expr_Const,
     Expr_Var,
     Expr_BinOp,
-    Expr_Cond,
-    Expr_Assign
+    Expr_Special
   };
 
-  ExprAST(ExprASTKind kind, Location location)
-      : kind(kind), location(location) {}
+  ExprAST(ExprASTKind kind, ExprASTType type, Location location)
+      : type(type), kind(kind), location(location) {}
 
   virtual ~ExprAST() = default;
+  ExprASTType getType() const { return type; }
   ExprASTKind getKind() const { return kind; }
   const Location &loc() { return location; }
 
 private:
+  const ExprASTType type;
   const ExprASTKind kind;
   Location location;
 };
 
-using ExprASTList = std::vector<std::unique_ptr<ExprAST>>;
+class BitsExprAST : public ExprAST {
+public:
+  BitsExprAST(ExprASTKind kind, Location location)
+      : ExprAST(kind, Expr_Bits, location) {}
+};
+
+using BitsExprASTList = std::vector<std::unique_ptr<BitsExprAST>>;
 
 class VarBoundsAST {
 public:
@@ -49,82 +61,153 @@ private:
   int64_t upper;
 };
 
-class VarExprAST : public ExprAST {
+class BitsVarExprAST : public BitsExprAST {
 public:
-  VarExprAST(Location location, llvm::StringRef name,
-             std::unique_ptr<VarBoundsAST> bounds) :
-      ExprAST(Expr_Var, location),
+  BitsVarExprAST(Location location, llvm::StringRef name,
+                 std::unique_ptr<VarBoundsAST> bounds) :
+      BitsExprAST(Expr_Var, location),
       name(name), bounds(std::move(bounds)) {}
 
   llvm::StringRef getName() { return name; }
   VarBoundsAST *getBounds() { return bounds.get(); }
+
+  static bool classof(const ExprAST *c) {
+    return c->getType() == Expr_Bits &&
+        c->getKind() == Expr_Var;
+  }
 
 private:
   std::string name;
   std::unique_ptr<VarBoundsAST> bounds;
 };
 
-using VarExprASTList = std::vector<std::unique_ptr<VarExprAST>>;
+using BitsVarExprASTList = std::vector<std::unique_ptr<BitsVarExprAST>>;
 
-class ConstExprAST : public ExprAST {
+class BitsConstExprAST : public BitsExprAST {
 public:
-  ConstExprAST(Location loc, int64_t val) :
-      ExprAST(Expr_Const, loc), val(val) {}
+  BitsConstExprAST(Location loc, int64_t val) :
+      BitsExprAST(Expr_Const, loc), val(val) {}
 
   int64_t getValue() { return val; }
+
+  static bool classof(const ExprAST *c) {
+    return c->getType() == Expr_Bits &&
+        c->getKind() == Expr_Const;
+  }
 
 private:
   int64_t val;
 };
 
-class BinaryExprAST : public ExprAST {
+class BitsBinaryExprAST : public BitsExprAST {
 public:
-  BinaryExprAST(Location loc, std::string op,
-                std::unique_ptr<ExprAST> lhs,
-                std::unique_ptr<ExprAST> rhs)
-      : ExprAST(Expr_BinOp, loc), op(op),
+  BitsBinaryExprAST(Location loc, std::string op,
+                    std::unique_ptr<BitsExprAST> lhs,
+                    std::unique_ptr<BitsExprAST> rhs)
+      : BitsExprAST(Expr_BinOp, loc), op(op),
         lhs(std::move(lhs)),
         rhs(std::move(rhs)) {}
 
   llvm::StringRef getOp() { return op; }
-  ExprAST *getLHS() { return lhs.get(); }
-  ExprAST *getRHS() { return rhs.get(); }
+  BitsExprAST *getLHS() { return lhs.get(); }
+  BitsExprAST *getRHS() { return rhs.get(); }
+
+  static bool classof(const ExprAST *c) {
+    return c->getType() == Expr_Bits &&
+        c->getKind() == Expr_BinOp;
+  }
 
 private:
   std::string op;
-  std::unique_ptr<ExprAST> lhs, rhs;
+  std::unique_ptr<BitsExprAST> lhs, rhs;
 };
 
-class ConditionExprAST : public ExprAST {
+class BitsAssignExprAST : public BitsExprAST {
 public:
-  ConditionExprAST(Location loc, std::string op,
-                   std::unique_ptr<ExprAST> lhs,
-                   std::unique_ptr<ExprAST> rhs) :
-      ExprAST(Expr_Cond, loc), op(op),
+  BitsAssignExprAST(Location loc,
+                    std::unique_ptr<BitsVarExprAST> lhs,
+                    std::unique_ptr<BitsExprAST> rhs) :
+      BitsExprAST(Expr_Special, loc),
+      lhs(std::move(lhs)), rhs(std::move(rhs)) {}
+
+  BitsVarExprAST *getLHS() { return lhs.get(); }
+  BitsExprAST *getRHS() { return rhs.get(); }
+
+  static bool classof(const ExprAST *c) {
+    return c->getType() == Expr_Bits &&
+        c->getKind() == Expr_Special;
+  }
+
+private:
+  std::unique_ptr<BitsVarExprAST> lhs;
+  std::unique_ptr<BitsExprAST> rhs;
+};
+
+class BoolExprAST : public ExprAST {
+public:
+  BoolExprAST(ExprASTKind kind, Location location) :
+      ExprAST(kind, Expr_Bool, location) {}
+};
+
+class BoolConstExprAST : public BoolExprAST {
+public:
+  BoolConstExprAST(Location location, bool val) :
+      BoolExprAST(Expr_Const, location), val(val) {}
+
+  bool getValue() { return val; }
+
+  static bool classof(const ExprAST *c) {
+    return c->getType() == Expr_Bool &&
+        c->getKind() == Expr_Const;
+  }
+
+private:
+  Location location;
+  bool val;
+};
+
+class BoolBinaryExprAST : public BoolExprAST {
+public:
+  BoolBinaryExprAST(Location loc, std::string op,
+                    std::unique_ptr<BoolExprAST> lhs,
+                    std::unique_ptr<BoolExprAST> rhs) :
+      BoolExprAST(Expr_BinOp, loc), op(op),
+      lhs(std::move(lhs)),
+      rhs(std::move(rhs)) {}
+
+  llvm::StringRef getOp() { return op; }
+  BoolExprAST *getLHS() { return lhs.get(); }
+  BoolExprAST *getRHS() { return rhs.get(); }
+
+  static bool classof(const ExprAST *c) {
+    return c->getType() == Expr_Bool &&
+        c->getKind() == Expr_BinOp;
+  }
+
+private:
+  std::string op;
+  std::unique_ptr<BoolExprAST> lhs, rhs;
+};
+
+class BoolCompExprAST : public BoolExprAST {
+public:
+  BoolCompExprAST(Location loc, std::string op,
+                  std::unique_ptr<BitsExprAST> lhs,
+                  std::unique_ptr<BitsExprAST> rhs) :
+      BoolExprAST(Expr_BinOp, loc), op(op),
       lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 
   llvm::StringRef getOp() { return op; }
-  ExprAST *getLHS() { return lhs.get(); }
-  ExprAST *getRHS() { return rhs.get(); }
+  BitsExprAST *getLHS() { return lhs.get(); }
+  BitsExprAST *getRHS() { return rhs.get(); }
 
+  static bool classof(const ExprAST *c) {
+    return c->getType() == Expr_Bool &&
+        c->getKind() == Expr_Special;
+  }
 private:
   std::string op;
-  std::unique_ptr<ExprAST> lhs, rhs;
-};
-
-class AssignmentExprAST : public ExprAST {
-public:
-  AssignmentExprAST(Location loc,
-                   std::unique_ptr<ExprAST> lhs,
-                   std::unique_ptr<ExprAST> rhs) :
-      ExprAST(Expr_Assign, loc),
-      lhs(std::move(lhs)), rhs(std::move(rhs)) {}
-
-  ExprAST *getLHS() { return lhs.get(); }
-  ExprAST *getRHS() { return rhs.get(); }
-
-private:
-  std::unique_ptr<ExprAST> lhs, rhs;
+  std::unique_ptr<BitsExprAST> lhs, rhs;
 };
 
 /// Properties
@@ -174,8 +257,8 @@ class EventAST {
 public:
   EventAST(std::string kind,
            Location location,
-           std::unique_ptr<ExprASTList> action,
-           std::unique_ptr<ConditionExprAST> condition)
+           std::unique_ptr<BitsExprASTList> action,
+           std::unique_ptr<BoolExprAST> condition)
       : kind(kind), location(location),
         action(std::move(action)), condition(std::move(condition)) {}
 
@@ -183,21 +266,18 @@ public:
 
   llvm::StringRef getKind() const { return kind; }
   const Location &loc() { return location; }
-  ExprASTList *getAction() { return action.get(); }
-  ConditionExprAST *getCondition() { return condition.get(); }
+  BitsExprASTList *getAction() { return action.get(); }
+  BoolExprAST *getCondition() { return condition.get(); }
 
 private:
   std::string kind;
   Location location;
-  std::unique_ptr<ExprASTList> action;
-  std::unique_ptr<ConditionExprAST> condition;
+  std::unique_ptr<BitsExprASTList> action;
+  std::unique_ptr<BoolExprAST> condition;
 };
 
 using EventASTList = std::vector<std::unique_ptr<EventAST>>;
 
-/// This class represents the "prototype" for a function, which captures its
-/// name, and its argument names (thus implicitly the number of arguments the
-/// function takes).
 class PrototypeAST {
   Location location;
   std::string name;
@@ -211,7 +291,6 @@ public:
   llvm::StringRef getName() const { return name; }
 };
 
-/// This class represents a function definition itself.
 class BlockAST {
 
 public:
@@ -232,7 +311,6 @@ private:
   std::unique_ptr<EventASTList> events;
 };
 
-/// This class represents a list of functions to be processed together
 class ModuleAST {
   std::vector<BlockAST> functions;
 
