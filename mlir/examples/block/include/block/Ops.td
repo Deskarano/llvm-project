@@ -34,12 +34,12 @@ def ConstantNumberOp : Block_Op<"const_num", [NoSideEffect]> {
 def ConstantBooleanOp : Block_Op<"const_bool", [NoSideEffect]> {
     let summary = "constant boolean";
 
-    let arguments = (ins BoolAttr:$value);
-    let results = (outs BoolLike);
+    let arguments = (ins I1Attr:$value);
+    let results = (outs I1);
 
     let builders = [
         OpBuilder<"Builder *builder, OperationState &state, "
-                    "BoolAttr value", [{
+                    "IntegerAttr value", [{
             build(builder, state, value.getType(), value);
         }]>,
 
@@ -77,8 +77,8 @@ def BitwiseXorOp : Binary_Op<"bit_xor"> {
 }
 
 class Boolean_Op<string mnemonic> : Block_Op<mnemonic> {
-    let arguments = (ins BoolLike:$lhs, BoolLike:$rhs);
-    let results = (outs BoolLike);
+    let arguments = (ins I1:$lhs, I1:$rhs);
+    let results = (outs I1);
 
     let builders = [
         OpBuilder<"Builder *b, OperationState &state, Value lhs, Value rhs">
@@ -95,7 +95,7 @@ def BooleanOrOp : Boolean_Op<"bool_or"> {
 
 class Comparison_Op<string mnemonic> : Block_Op<mnemonic> {
     let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
-    let results = (outs BoolLike);
+    let results = (outs I1);
 
     let builders = [
         OpBuilder<"Builder *b, OperationState &state, Value lhs, Value rhs">

@@ -213,22 +213,22 @@ private:
   }
 
   mlir::LogicalResult mlirGenActions(BitsExprASTList *exprList) {
-
+    return mlir::success();
   }
 
   mlir::LogicalResult mlirGenEvents(EventASTList *events) {
     // parse all the "always" events first - these go at the beginning of the function block
-    for (auto &e : *events) {
-      if (e->getKind() == "always") {
-        if (e->getCondition() != nullptr) {
-          emitError(loc(e->loc()), "always event with condition");
-          return mlir::failure();
-        }
-
-        if (failed(mlirGenActions(e->getAction())))
-          return mlir::failure();
-      }
-    }
+//    for (auto &e : *events) {
+//      if (e->getKind() == "always") {
+//        if (e->getCondition() != nullptr) {
+//          emitError(loc(e->loc()), "always event with condition");
+//          return mlir::failure();
+//        }
+//
+//        if (failed(mlirGenActions(e->getAction())))
+//          return mlir::failure();
+//      }
+//    }
 
     // then parse the "when" events
     for (auto &e : *events) {

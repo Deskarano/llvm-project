@@ -4,7 +4,7 @@ block main
     input(no[7:0], fuuuuuuu)
     output(boiiiiiiiiii)
 
-    when(false && a == b + (5 - 0))
+    when(false && no[3] == fuuuuuuu + (5 - 0))
     {
         a[5] = 5 + 3
         c = 7
@@ -13,5 +13,15 @@ block main
     always
     {
         boiiiiii = no
+    }
+}
+
+block test
+{
+    input(a, b)
+
+    when(a == b)
+    {
+        a = b + 1
     }
 }

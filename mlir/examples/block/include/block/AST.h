@@ -194,7 +194,7 @@ public:
   BoolCompExprAST(Location loc, std::string op,
                   std::unique_ptr<BitsExprAST> lhs,
                   std::unique_ptr<BitsExprAST> rhs) :
-      BoolExprAST(Expr_BinOp, loc), op(op),
+      BoolExprAST(Expr_Special, loc), op(op),
       lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 
   llvm::StringRef getOp() { return op; }
