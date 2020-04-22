@@ -62,6 +62,12 @@ private:
   }
 
   mlir::Value mlirGenBitsConstExpr(BitsConstExprAST &expr) {
+    if(log2(expr.getValue()) >= expr.getSize())
+    {
+      emitError(loc(expr.loc()), "constant does not fit into specified size");
+      return nullptr;
+    }
+
     return builder.create<ConstantNumberOp>(loc(expr.loc()), expr.getValue(), expr.getSize());
   }
 
@@ -89,13 +95,6 @@ private:
   }
 
   mlir::Value mlirGenBitsBinaryExpr(BitsBinaryExprAST &expr) {
-    if (expr.getLHS()->getSize() != expr.getRHS()->getSize()) {
-      emitError(loc(expr.loc()), "cannot create expression with different sizes for LHS and RHS");
-      return nullptr;
-    }
-
-    int size = expr.getLHS()->getSize();
-
     mlir::Value lhs = mlirGenBitsExpr(*expr.getLHS());
     if (!lhs)
       return nullptr;
@@ -103,6 +102,13 @@ private:
     mlir::Value rhs = mlirGenBitsExpr(*expr.getRHS());
     if (!rhs)
       return nullptr;
+
+    if (expr.getLHS()->getSize() != expr.getRHS()->getSize()) {
+      emitError(loc(expr.loc()), "cannot create expression with different sizes for LHS and RHS");
+      return nullptr;
+    }
+
+    int size = expr.getLHS()->getSize();
 
     auto location = loc(expr.loc());
     if (expr.getOp() == "+")
