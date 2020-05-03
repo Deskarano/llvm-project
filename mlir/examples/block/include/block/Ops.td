@@ -47,6 +47,22 @@ def ConstantBooleanOp : Block_Op<"const_bool", [NoSideEffect]> {
     ];
 }
 
+def ConstantEmptyOp : Block_Op<"const_empty", [NoSideEffect]> {
+    let summary = "constant empty";
+
+    let arguments = (ins StrAttr:$value);
+    let results = (outs AnyInteger);
+
+    let builders = [
+        OpBuilder<"Builder *builder, OperationState *state, "
+                    "StringAttr value", [{
+            build(builder, state, value);
+        }]>,
+
+        OpBuilder<"Builder *builder, OperationState &state, llvm::StringRef value, int size">
+    ];
+}
+
 def SliceOp : Block_Op<"slice"> {
     let summary = "variable slice operator";
 
@@ -87,7 +103,7 @@ def BitwiseXorOp : Binary_Op<"bit_xor"> {
     let summary = "bitwise exlusive or operator";
 }
 
-class Boolean_Op<string mnemonic> : Block_Op<mnemonic> {
+class Boolean_Op<string mnemonic> : Block_Op<mnemonic, [NativeOpTrait<"ResultsAreBoolLike">]> {
     let arguments = (ins I1:$lhs, I1:$rhs);
     let results = (outs I1);
 
@@ -136,4 +152,39 @@ def EqualOp : Comparison_Op<"eq"> {
 def NotEqualOp : Comparison_Op<"neq"> {
     let summary = "not equal to operator";
 }
+
+/// Control flow
+
+def EventCall : Block_Op<"event", [Terminator]> {
+    let summary = "event call operator";
+
+    let builders = [
+        OpBuilder<"Builder *builder, OperationState &state, "
+                  "Value condition, Block *dst">
+    ];
+}
+
+def MergeOp : Block_Op<"merge"> {
+    let summary = "output merge operator";
+
+    let arguments = (ins Variadic<AnyInteger>:$inputs);
+    let results = (outs AnyInteger:$output);
+
+    let builders = [
+        OpBuilder<"Builder *builder, OperationState &state, "
+                    "ArrayRef<Value> arguments">
+    ];
+}
+
+def ReturnOp : Block_Op<"return", [Terminator, HasParent<"FuncOp">]> {
+    let summary = "return operator";
+
+    let arguments = (ins Variadic<AnyInteger>:$input);
+
+    let builders = [
+        OpBuilder<"Builder *builder, OperationState &state, "
+                    "ArrayRef<Value> arguments">
+    ];
+}
+
 #endif // BLOCK_OPS

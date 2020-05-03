@@ -62,6 +62,11 @@ public:
   int getLower() { return lower; }
   int getUpper() { return upper; }
 
+  bool operator==(VarBoundsAST other) {
+    return other.getLower() == lower &&
+        other.getUpper() == upper;
+  }
+
 private:
   int lower;
   int upper;

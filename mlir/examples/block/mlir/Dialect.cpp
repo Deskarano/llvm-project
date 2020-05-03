@@ -41,10 +41,16 @@ static mlir::LogicalResult verify(ConstantBooleanOp op) {
   return success();
 }
 
+void ConstantEmptyOp::build(Builder *builder, OperationState &state, llvm::StringRef value, int size) {
+  auto resultType = IntegerType::get(size, builder->getContext());
+  auto attribute = StringAttr::get(value, builder->getContext());
+
+  ConstantEmptyOp::build(builder, state, resultType, attribute);
+}
+
 void SliceOp::build(Builder *b, OperationState &state, Value val, int upper, int lower) {
   auto dataType = IntegerType::get(abs(upper - lower) + 1, b->getContext());
-  auto sliceType = IntegerType::get(64, b->getContext());
-  ;
+  auto sliceType = IntegerType::get(64, b->getContext());;
   SliceOp::build(b, state, dataType, val,
                  IntegerAttr::get(sliceType, upper),
                  IntegerAttr::get(sliceType, lower));
@@ -123,6 +129,27 @@ void EqualOp::build(Builder *b, OperationState &state, Value lhs, Value rhs) {
 void NotEqualOp::build(Builder *b, OperationState &state, Value lhs, Value rhs) {
   state.addTypes(IntegerType::get(1, b->getContext()));
   state.addOperands({lhs, rhs});
+}
+
+/// Function operators
+
+void EventCall::build(Builder *builder, OperationState &state, Value condition, Block *dst) {
+  state.addOperands(condition);
+  state.addSuccessor(dst, mlir::ValueRange());
+}
+
+void MergeOp::build(Builder *builder, OperationState &state, ArrayRef<Value> arguments) {
+  int sum = 0;
+  for(auto &a : arguments) {
+    sum += a.getType().getIntOrFloatBitWidth();
+  }
+
+  state.addOperands(arguments);
+  state.addTypes(IntegerType::get(sum, builder->getContext()));
+}
+
+void ReturnOp::build(Builder *builder, OperationState &state, ArrayRef<Value> arguments) {
+  state.addOperands(arguments);
 }
 
 #define GET_OP_CLASSES
