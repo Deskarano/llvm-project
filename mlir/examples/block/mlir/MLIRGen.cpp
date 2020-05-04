@@ -14,7 +14,6 @@
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/raw_ostream.h"
 
-
 using namespace mlir::block;
 using namespace block;
 
@@ -35,10 +34,12 @@ public:
       theModule.push_back(block);
     }
 
-//    if (failed(mlir::verify(theModule))) {
-//      theModule.emitError("module verification error");
-//      return nullptr;
-//    }
+    theModule.dump();
+
+    if (failed(mlir::verify(theModule))) {
+      theModule.emitError("module verification error");
+      return nullptr;
+    }
 
     return theModule;
   }
@@ -129,7 +130,7 @@ private:
 
     if (expr.getLHS()->getSize() != expr.getRHS()->getSize()) {
       emitError(loc(expr.loc()), "cannot create expression with different sizes for LHS and RHS ")
-       << expr.getLHS()->getSize() << " " << expr.getRHS()->getSize() << "\n";
+          << expr.getLHS()->getSize() << " " << expr.getRHS()->getSize() << "\n";
       return nullptr;
     }
 
@@ -333,11 +334,16 @@ private:
   mlir::LogicalResult mlirGenActions(BitsExprASTList *exprList,
                                      mlir::Value condition) {
     auto savedPos = builder.saveInsertionPoint();
-    mlir::Block *trueBlock;
+    mlir::Block *trueBlock, *falseBlock;
 
     if (condition) {
       trueBlock = builder.createBlock(condition.getParentRegion(),
                                       condition.getParentRegion()->end());
+      falseBlock = builder.createBlock(condition.getParentRegion(),
+                                       condition.getParentRegion()->end());
+
+      builder.restoreInsertionPoint(savedPos);
+      builder.create<EventCall>(condition.getLoc(), condition, trueBlock, falseBlock);
       builder.setInsertionPointToStart(trueBlock);
     }
 
@@ -358,9 +364,10 @@ private:
     }
 
     if (condition) {
-      builder.restoreInsertionPoint(savedPos);
-      builder.create<EventCall>(condition.getLoc(), condition, trueBlock);
+      builder.create<EventDone>(condition.getLoc(), falseBlock);
+      builder.setInsertionPointToStart(falseBlock);
     }
+
     return mlir::success();
   }
 
@@ -549,7 +556,7 @@ private:
       orderedValues.push_back(newValue);
     }
 
-    if(orderedBounds.front()->getUpper() != varBounds->getUpper()){
+    if (orderedBounds.front()->getUpper() != varBounds->getUpper()) {
       auto newBounds = new VarBoundsAST(orderedBounds.front()->getUpper() + 1, varBounds->getUpper());
       auto newValue = builder.create<ConstantEmptyOp>(loc(blockLoc), "X",
                                                       abs(newBounds->getUpper() -
@@ -559,7 +566,7 @@ private:
       orderedValues.insert(orderedValues.begin(), newValue);
     }
 
-    if(orderedBounds.back()->getLower() != varBounds->getLower()) {
+    if (orderedBounds.back()->getLower() != varBounds->getLower()) {
       auto newBounds = new VarBoundsAST(varBounds->getLower(), orderedBounds.back()->getLower() - 1);
       auto newValue = builder.create<ConstantEmptyOp>(loc(blockLoc), "X",
                                                       abs(newBounds->getUpper() -
@@ -621,7 +628,7 @@ private:
     // finally zip up the outputs
     for (auto name : outputNames) {
       auto value = mlirGenMerge(blockAST.getProto()->loc(), name);
-      if(!value)
+      if (!value)
         return nullptr;
 
       returnArgs.push_back(value);
@@ -629,7 +636,7 @@ private:
 
     for (auto name : stateNames) {
       auto value = mlirGenMerge(blockAST.getProto()->loc(), name);
-      if(!value)
+      if (!value)
         return nullptr;
 
       returnArgs.push_back(value);

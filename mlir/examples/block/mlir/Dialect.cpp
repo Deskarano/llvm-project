@@ -17,7 +17,7 @@ BlockDialect::BlockDialect(mlir::MLIRContext *ctx) : mlir::Dialect("block", ctx)
 
 void ConstantNumberOp::build(mlir::Builder *builder,
                              mlir::OperationState &state,
-                             int64_t value, int size) {
+                             int value, int size) {
   auto dataType = IntegerType::get(size, builder->getContext());
   auto dataAttribute = IntegerAttr::get(dataType, value);
 
@@ -133,14 +133,20 @@ void NotEqualOp::build(Builder *b, OperationState &state, Value lhs, Value rhs) 
 
 /// Function operators
 
-void EventCall::build(Builder *builder, OperationState &state, Value condition, Block *dst) {
+void EventCall::build(Builder *builder, OperationState &state, Value condition,
+                      Block *trueBlock, Block *falseBlock) {
   state.addOperands(condition);
-  state.addSuccessor(dst, mlir::ValueRange());
+  state.addSuccessor(trueBlock, mlir::ValueRange());
+  state.addSuccessor(falseBlock, mlir::ValueRange());
+}
+
+void EventDone::build(Builder *builder, OperationState &state, Block *next) {
+  state.addSuccessor(next, mlir::ValueRange());
 }
 
 void MergeOp::build(Builder *builder, OperationState &state, ArrayRef<Value> arguments) {
   int sum = 0;
-  for(auto &a : arguments) {
+  for (auto &a : arguments) {
     sum += a.getType().getIntOrFloatBitWidth();
   }
 

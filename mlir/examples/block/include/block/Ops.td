@@ -25,7 +25,7 @@ def ConstantNumberOp : Block_Op<"const_num", [NoSideEffect]> {
             build(builder, state, value.getType(), value);
         }]>,
 
-        OpBuilder<"Builder *builder, OperationState &state, int64_t value, int size">
+        OpBuilder<"Builder *builder, OperationState &state, int value, int size">
     ];
 
     let verifier = [{ return ::verify(*this); }];
@@ -155,12 +155,21 @@ def NotEqualOp : Comparison_Op<"neq"> {
 
 /// Control flow
 
-def EventCall : Block_Op<"event", [Terminator]> {
+def EventCall : Block_Op<"eventcall", [Terminator]> {
     let summary = "event call operator";
 
+    let arguments = (ins I1:$condition);
     let builders = [
         OpBuilder<"Builder *builder, OperationState &state, "
-                  "Value condition, Block *dst">
+                  "Value condition, Block *trueBlock, Block *falseBlock">
+    ];
+}
+
+def EventDone : Block_Op<"eventdone", [Terminator]> {
+    let summary = "event finish operator";
+
+    let builders = [
+        OpBuilder<"Builder *builder, OperationState &state, Block *next">
     ];
 }
 

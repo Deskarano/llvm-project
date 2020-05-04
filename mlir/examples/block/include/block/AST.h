@@ -46,7 +46,7 @@ public:
   BitsExprAST(ExprASTKind kind, Location location, int size)
       : ExprAST(kind, Expr_Bits, location), size(size) {}
 
-  int getSize() { return size; }
+  virtual int getSize() { return size; }
 
 protected:
   int size;
