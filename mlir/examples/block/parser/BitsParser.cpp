@@ -1,7 +1,5 @@
 #include "block/Parser.h"
 
-#include <climits>
-
 namespace block {
 
 std::unique_ptr<VarBoundsAST> Parser::parseBounds(bool allowSingle) {

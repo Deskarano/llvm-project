@@ -2,10 +2,6 @@
 
 namespace block {
 
-//std::unique_ptr<BitsVarExprAST> Parser::parseBoolVar() {
-//  return nullptr;
-//}
-
 std::unique_ptr<BoolConstExprAST> Parser::parseBoolConst() {
   auto loc = lexer.getLastLocation();
   auto result = std::make_unique<BoolConstExprAST>(std::move(loc),
