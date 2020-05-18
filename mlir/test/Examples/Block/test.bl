@@ -1,0 +1,28 @@
+block main
+{
+    input(byte_in[7:0])
+    output(byte_out[7:0])
+    state(clk, shift, buf[7:0])
+
+    always
+    {
+        clk = clk + 1
+    }
+
+    when(clk == 1 && byte_in[7:0] == 8x60)
+    {
+    	buf = byte_in	
+    }
+
+    when(clk == 1 && byte_in[7:0] = 8b01100100)
+    {
+        buf = byte_in - 8b4
+	shift = 1b1
+    }
+
+    when(shift = 1b1)
+    {
+        byte_out = buf
+        shift = 1b0
+    }
+}

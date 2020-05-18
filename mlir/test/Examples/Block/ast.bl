@@ -1,17 +1,17 @@
 
 block main
 {
-    input(no[7:0], fuuuuuuu[8:0])
-    output(boiiiiiiiiii, yeah[3:0])
+    input(input1[7:0], input2[8:0])
+    output(output1, output2[3:0])
     state(a[7:0], clk)
 
-    when(fuuuuuuu[5:3] <= 3b111 && no == 8b10101010)
+    when(input2[5:3] <= 3b111 && input1 == 8b10101010)
     {
         a[6] = 1b0
         a[5] = 1b1
         a[4] = 1b0
 
-        yeah[1:0] = 2b2
+        output2[1:0] = 2b2
     }
 
     when(clk == 1b1)
@@ -25,6 +25,6 @@ block main
 
     when(clk == 1b0)
     {
-        boiiiiiiiiii = a[0] & clk
+        output1 = a[0] & clk
     }
 }
